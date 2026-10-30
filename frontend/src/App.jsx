@@ -26,11 +26,13 @@ export default function App() {
   const [selectedSupplierId, setSelectedSupplierId] = useState('SUP001');
   const [selectedProductId, setSelectedProductId] = useState('P001');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleNavigateToAnalysis = (supId = 'SUP001', prodId = 'P001') => {
     setSelectedSupplierId(supId);
     setSelectedProductId(prodId);
     setActivePage('risk-analysis');
+    setMobileMenuOpen(false);
   };
 
   const handleQuickAnalyze = () => {
@@ -39,6 +41,11 @@ export default function App() {
     setTimeout(() => {
       setIsAnalyzing(false);
     }, 800);
+  };
+
+  const handleSelectPage = (pageId) => {
+    setActivePage(pageId);
+    setMobileMenuOpen(false);
   };
 
   const renderActivePage = () => {
@@ -94,9 +101,14 @@ export default function App() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#060b17] text-slate-100 font-sans">
-      {/* Fixed Sidebar */}
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
+    <div className="flex min-h-screen bg-[#060b17] text-slate-100 font-sans relative">
+      {/* Sidebar with Mobile Drawer support */}
+      <Sidebar 
+        activePage={activePage} 
+        setActivePage={handleSelectPage} 
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -104,12 +116,14 @@ export default function App() {
           activePageTitle={PAGE_TITLES[activePage] || 'SupplySenseAI'} 
           onQuickAnalyze={handleQuickAnalyze}
           isAnalyzing={isAnalyzing}
+          onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
         />
 
-        <main className="p-6 lg:p-8 flex-1 max-w-7xl w-full mx-auto">
+        <main className="p-3 sm:p-6 lg:p-8 flex-1 max-w-7xl w-full mx-auto">
           {renderActivePage()}
         </main>
       </div>
     </div>
   );
 }
+

@@ -8,7 +8,8 @@ import {
   Lightbulb, 
   Sparkles, 
   Layers,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -22,22 +23,43 @@ const NAV_ITEMS = [
   { id: 'architecture', label: 'Architecture', icon: Layers }
 ];
 
-export default function Sidebar({ activePage, setActivePage }) {
+export default function Sidebar({ activePage, setActivePage, isOpen, onClose }) {
   return (
-    <aside className="w-64 bg-[#0c0c0e] border-r border-zinc-800/90 flex flex-col justify-between h-screen sticky top-0 z-20">
-      <div>
-        {/* Brand Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
-          <div>
-            <h1 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
-              SUPPLYSENSE<span className="text-zinc-400 font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-800">AI</span>
-            </h1>
-            <p className="text-[11px] text-zinc-400 font-medium mt-0.5">Supply-Chain Risk Engine</p>
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div 
+          onClick={onClose}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-30 lg:hidden"
+        />
+      )}
+
+      <aside className={`
+        fixed lg:sticky top-0 left-0 z-40 h-screen w-64 bg-[#0c0c0e] border-r border-zinc-800/90 
+        flex flex-col justify-between transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div>
+          {/* Brand Header */}
+          <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h1 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
+                SUPPLYSENSE<span className="text-zinc-400 font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-800">AI</span>
+              </h1>
+              <p className="text-[11px] text-zinc-400 font-medium mt-0.5">Supply-Chain Risk Engine</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              {/* Mobile close button */}
+              <button 
+                onClick={onClose}
+                className="lg:hidden p-1 text-zinc-400 hover:text-white rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          </div>
-        </div>
+
 
         {/* Navigation List */}
         <div className="px-3 py-4 space-y-1">
@@ -90,5 +112,7 @@ export default function Sidebar({ activePage, setActivePage }) {
         <p className="text-[11px] font-mono text-zinc-500 mt-1">XGBoost &bull; SHAP &bull; Llama-3.3</p>
       </div>
     </aside>
+    </>
   );
 }
+

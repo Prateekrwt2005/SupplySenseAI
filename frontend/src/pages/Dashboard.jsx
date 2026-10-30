@@ -69,13 +69,13 @@ export default function Dashboard({ onNavigateToAnalysis }) {
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="human-card rounded-lg p-6 border-zinc-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="human-card rounded-lg p-4 sm:p-6 border-zinc-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-zinc-400 text-xs font-mono font-bold uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-zinc-400 text-[11px] sm:text-xs font-mono font-bold uppercase tracking-wider mb-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             Active Monitoring Node
           </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
             Supply Chain Resilience Dashboard
           </h1>
           <p className="text-zinc-400 text-xs mt-1 max-w-2xl font-normal leading-relaxed">
@@ -84,12 +84,13 @@ export default function Dashboard({ onNavigateToAnalysis }) {
         </div>
         <button
           onClick={() => onNavigateToAnalysis('SUP001', 'P001')}
-          className="flex items-center gap-2 px-5 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex-shrink-0"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex-shrink-0"
         >
           <span>Analyze Demo Node (SUP001)</span>
           <ArrowUpRight className="w-4 h-4" />
         </button>
       </div>
+
 
       {/* KPI Cards Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -75,27 +75,15 @@ export default function Suppliers({ onNavigateToAnalysis }) {
           <p className="text-xs text-zinc-400 mt-0.5 font-normal">Tracking lead times, reliability %, delay rates, and disruption risk</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Add Supplier Button */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-white text-black hover:bg-zinc-200 text-xs font-bold transition-colors font-mono cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-white text-black hover:bg-zinc-200 text-xs font-bold transition-colors font-mono cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Supplier
           </button>
-
-          {/* Search Box */}
-          <div className="relative flex-1 sm:w-60">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Filter by name, ID, country..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white font-medium"
-            />
-          </div>
 
           {/* Tier Filter */}
           <select
@@ -108,8 +96,21 @@ export default function Suppliers({ onNavigateToAnalysis }) {
             <option value="Tier 2">Tier 2</option>
             <option value="Tier 3">Tier 3</option>
           </select>
+
+          {/* Search Box */}
+          <div className="relative w-full sm:w-60">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Filter by name, ID, country..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white font-medium"
+            />
+          </div>
         </div>
       </div>
+
 
       {/* Supplier Grid / Table */}
       <div className="human-card rounded-lg border-zinc-800 overflow-hidden">

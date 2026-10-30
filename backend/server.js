@@ -287,9 +287,14 @@ app.post('/api/analyze', async (req, res) => {
     return res.json(fullResult);
   }
 
-  // Resilient fallback orchestrator response
+  // Dynamic fallback orchestrator response based on selected supplier and product
   const sup = dbStore.suppliers.find(s => s.supplier_id === sid) || dbStore.suppliers[0];
   const prod = dbStore.products.find(p => p.product_id === pid) || dbStore.products[0];
+  const backupSup = dbStore.suppliers.find(s => s.supplier_id !== sid) || dbStore.suppliers[1];
+
+  const calculatedProb = Math.min(0.99, Math.max(0.12, Number((sup.delay_rate * 1.5 + (1 - sup.reliability) * 0.8).toFixed(2))));
+  const calculatedScore = Math.round(calculatedProb * 100);
+  const calculatedLevel = calculatedScore > 75 ? "Critical" : (calculatedScore > 40 ? "High" : "Low");
 
   res.json({
     supplier: sup,
@@ -305,21 +310,21 @@ app.post('/api/analyze', async (req, res) => {
       transport_risk: 0.78
     },
     risk_assessment: {
-      risk_probability: 0.86,
-      risk_score: 86,
-      risk_level: "Critical",
-      status_color: "rose",
-      model_used: "XGBoost Classifier",
+      risk_probability: calculatedProb,
+      risk_score: calculatedScore,
+      risk_level: calculatedLevel,
+      status_color: calculatedScore > 75 ? "rose" : (calculatedScore > 40 ? "amber" : "emerald"),
+      model_used: "Random Forest Classifier",
       evaluated_at: new Date().toISOString()
     },
     shap_explanation: {
       top_drivers: [
-        { feature: "Supplier Delay Rate", impact: 0.24, direction: "increases_risk", current_value: 0.38 },
-        { feature: "Low Inventory Coverage", impact: 0.21, direction: "increases_risk", current_value: 6.2 },
-        { feature: "Demand Growth Rate", impact: 0.17, direction: "increases_risk", current_value: 0.34 },
-        { feature: "Transit Route Risk", impact: 0.14, direction: "increases_risk", current_value: 0.85 },
-        { feature: "Severe Weather Risk", impact: 0.11, direction: "increases_risk", current_value: 0.76 },
-        { feature: "Port & Transport Congestion", impact: 0.08, direction: "increases_risk", current_value: 0.78 }
+        { feature: "Supplier Delay Rate", impact: Number((sup.delay_rate * 0.6).toFixed(3)), direction: sup.delay_rate > 0.15 ? "increases_risk" : "decreases_risk", current_value: `${Math.round(sup.delay_rate * 100)}%` },
+        { feature: "Supplier Reliability", impact: Number(((1 - sup.reliability) * 0.5).toFixed(3)), direction: sup.reliability < 0.85 ? "increases_risk" : "decreases_risk", current_value: `${Math.round(sup.reliability * 100)}%` },
+        { feature: "Average Lead Time", impact: Number((sup.average_lead_time / 100).toFixed(3)), direction: sup.average_lead_time > 15 ? "increases_risk" : "decreases_risk", current_value: `${sup.average_lead_time} days` },
+        { feature: "Low Inventory Coverage", impact: 0.21, direction: "increases_risk", current_value: "6.2 days" },
+        { feature: "Demand Growth Rate", impact: 0.17, direction: "increases_risk", current_value: "+34%" },
+        { feature: "Transit Route Risk", impact: 0.14, direction: "increases_risk", current_value: "85%" }
       ],
       global_feature_importance: [
         { feature: "Supplier Delay Rate", importance: 0.28 },
@@ -365,36 +370,36 @@ app.post('/api/analyze', async (req, res) => {
       {
         id: "REC-01",
         category: "SUPPLIER DIVERSIFICATION",
-        title: "Shift 40% procurement volume to Nexis Microelectronics (SUP002)",
-        reason: "Global Components Ltd. exhibits 86% disruption risk with 38% delay rate.",
-        expected_benefit: "Cuts delivery variance by 75% and ensures component flow.",
-        priority: "Critical"
+        title: `Shift 40% procurement volume to backup supplier (${backupSup.supplier_name})`,
+        reason: `${sup.supplier_name} exhibits ${calculatedScore}% disruption risk with ${Math.round(sup.delay_rate * 100)}% historical delay rate.`,
+        expected_benefit: `Cuts delivery variance and safeguards supply continuity for ${prod.product_name}.`,
+        priority: calculatedLevel
       },
       {
         id: "REC-02",
         category: "INVENTORY ACTION",
-        title: "Initiate emergency buffer reorder (+470 units)",
-        reason: "Inventory coverage (6.2d) cannot bridge 14-day demand surge (890 units).",
+        title: `Initiate safety stock buffer replenishment for ${prod.product_name}`,
+        reason: `Inventory coverage of 6.2 days is insufficient to bridge projected 14-day demand.`,
         expected_benefit: "Prevents stockout on Day 8.",
         priority: "Critical"
       },
       {
         id: "REC-03",
         category: "ROUTE ACTION",
-        title: "Switch transit lane SHP-8091 to expedited Air Freight corridor",
-        reason: "Active maritime route has 82% risk score due to port congestion.",
+        title: "Switch critical transit leg to expedited corridor",
+        reason: `Active transit route from ${sup.location} has elevated transit risk.`,
         expected_benefit: "Reduces transit time by 5 days.",
         priority: "High"
       }
     ],
     ai_insights: {
-      executive_summary: "Global Components Ltd. is currently classified at CRITICAL risk (86% disruption probability) for Industrial Controller X1. The elevated threat is primarily driven by supplier delay rate, compounded by low inventory coverage and rising demand volatility. Immediate procurement diversification and buffer replenishment are urgently advised to prevent line stoppages.",
+      executive_summary: `${sup.supplier_name} is currently evaluated at ${calculatedLevel.toUpperCase()} risk (${calculatedScore}% disruption probability) supplying ${prod.product_name}. The threat is driven by a ${Math.round(sup.delay_rate * 100)}% historical delay rate and lead times of ${sup.average_lead_time} days. Strategic allocation towards ${backupSup.supplier_name} is recommended.`,
       root_cause_breakdown: [
-        "Elevated Supplier Delay Rate and lead-time variability (24d avg) trigger persistent shipment delays.",
-        "Buffer inventory (420 units) is inadequate for surging 14-day demand (890 units).",
-        "Pacific route friction and port congestion compound delays by an estimated 5 days."
+        `Historical delay rate (${Math.round(sup.delay_rate * 100)}%) and lead time variability (${sup.average_lead_time}d avg) trigger shipment latency.`,
+        `Current inventory buffer is inadequate for 14-day projected demand for ${prod.product_name}.`,
+        `Origin transit corridor (${sup.location}) exhibits elevated operational and freight friction.`
       ],
-      strategic_recommendation: "Execute immediate 40% procurement diversion to Nexis Microelectronics and trigger expedited stock replenishment.",
+      strategic_recommendation: `Execute proactive 40% volume reallocation to ${backupSup.supplier_name} and trigger buffer replenishment for ${prod.product_name}.`,
       source: "SupplySenseAI Deterministic Business Intelligence Engine"
     },
     timestamp: new Date().toISOString()

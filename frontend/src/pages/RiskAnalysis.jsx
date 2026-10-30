@@ -242,11 +242,23 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
               </div>
               <div className="flex justify-between pb-1.5 border-b border-zinc-800/60 font-mono">
                 <span className="text-zinc-400">Delay Rate:</span>
-                <span className="font-bold text-red-400">38% (High)</span>
+                <span className={`font-bold ${
+                  (analysisResult?.supplier?.delay_rate || 0.38) > 0.25 ? 'text-red-400' : 'text-emerald-400'
+                }`}>
+                  {Math.round((analysisResult?.supplier?.delay_rate !== undefined ? analysisResult.supplier.delay_rate : 0.38) * 100)}%
+                </span>
+              </div>
+              <div className="flex justify-between pb-1.5 border-b border-zinc-800/60 font-mono">
+                <span className="text-zinc-400">Reliability:</span>
+                <span className="font-bold text-white">
+                  {Math.round((analysisResult?.supplier?.reliability !== undefined ? analysisResult.supplier.reliability : 0.85) * 100)}%
+                </span>
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-zinc-400">Inventory Coverage:</span>
-                <span className="font-bold text-red-400">6.2 Days (Critical)</span>
+                <span className="font-bold text-amber-400">
+                  {analysisResult?.features_evaluated?.inventory_days || 6.2} Days
+                </span>
               </div>
             </div>
           </div>
