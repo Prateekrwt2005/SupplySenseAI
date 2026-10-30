@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, Bot, ArrowRight, ShieldAlert, Cpu, CheckCircle2 } from 'lucide-react';
+import { MessageSquare, Bot, ArrowRight, ShieldAlert, Cpu, CheckCircle2, RefreshCw } from 'lucide-react';
 import RiskBadge from '../components/RiskBadge';
 import { runAnalyzeSupplyChain } from '../services/api';
 
@@ -45,11 +45,22 @@ export default function AIInsights({ onNavigateToAnalysis }) {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="human-card rounded-lg p-6 border-zinc-800">
+      <div className="human-card rounded-lg p-6 border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">Executive Intelligence & Natural Language Synthesis</h2>
           <p className="text-xs text-zinc-400 mt-0.5 font-normal">C-level disruption explanations synthesized directly from quantitative ML & SHAP outputs</p>
         </div>
+        <button
+          onClick={() => {
+            const active = PRESET_QUERIES[selectedPreset];
+            runQuery(active.supplier, active.product);
+          }}
+          disabled={loading}
+          className="flex items-center gap-2 px-3.5 py-2 rounded bg-white text-black hover:bg-zinc-200 text-xs font-bold transition-all disabled:opacity-50 flex-shrink-0"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span>{loading ? 'Refreshing...' : 'Refresh Copilot Briefing'}</span>
+        </button>
       </div>
 
       {/* Preset Scenario Selector */}
