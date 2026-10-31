@@ -104,8 +104,8 @@ export default function AIInsights({ onNavigateToAnalysis }) {
             Executive Summary (C-Suite Directives)
           </span>
           <p className="text-white text-sm leading-relaxed font-semibold">
-            "{insightData?.ai_insights?.executive_summary || 
-              'Global Components Ltd. is currently classified at CRITICAL risk (86% disruption probability) for Industrial Controller X1. The elevated threat is primarily driven by supplier delay rate, compounded by low inventory coverage and rising demand volatility. Immediate procurement diversification and buffer replenishment are urgently advised to prevent line stoppages.'}"
+            {insightData?.ai_insights?.executive_summary || 
+              'Global Components Ltd. is currently classified at CRITICAL risk (86% disruption probability) for Industrial Controller X1. The elevated threat is primarily driven by supplier delay rate, compounded by low inventory coverage and rising demand volatility. Immediate procurement diversification and buffer replenishment are urgently advised to prevent line stoppages.'}
           </p>
         </div>
 

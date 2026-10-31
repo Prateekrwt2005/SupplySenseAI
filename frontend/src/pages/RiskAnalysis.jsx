@@ -349,8 +349,8 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
             <div className="space-y-4 text-xs leading-relaxed">
               <div className="p-4 rounded bg-zinc-950 border border-zinc-800">
                 <p className="font-semibold text-white text-sm leading-relaxed">
-                  "{analysisResult?.ai_insights?.executive_summary || 
-                    'Supplier A is currently at critical disruption risk due to increasing delivery delays, low inventory coverage and rising demand. The recommended response is to diversify procurement toward Supplier B and increase safety stock.'}"
+                  {analysisResult?.ai_insights?.executive_summary || 
+                    'Supplier A is currently at critical disruption risk due to increasing delivery delays, low inventory coverage and rising demand. The recommended response is to diversify procurement toward Supplier B and increase safety stock.'}
                 </p>
               </div>
 
