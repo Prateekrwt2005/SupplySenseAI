@@ -249,9 +249,10 @@
       "expected_delivery": "2026-09-16",
       "actual_delivery": "2026-09-21",
       "delay_days": 5,
-      "route_risk": 0.82,
+      "route_risk": 0.85,
       "transport_mode": "Maritime",
-      "status": "Delayed"
+      "status": "Delayed",
+      "disruption_cause": "Taiwan Strait Military Exercises & East China Sea Typhoon Storms"
     },
     {
       "shipment_id": "SHP-8092",
@@ -264,7 +265,8 @@
       "delay_days": 0,
       "route_risk": 0.22,
       "transport_mode": "Air Freight",
-      "status": "In Transit"
+      "status": "In Transit",
+      "disruption_cause": "Normal Operations"
     },
     {
       "shipment_id": "SHP-8093",
@@ -275,9 +277,10 @@
       "expected_delivery": "2026-09-15",
       "actual_delivery": "2026-09-16",
       "delay_days": 1,
-      "route_risk": 0.28,
+      "route_risk": 0.35,
       "transport_mode": "Air Freight",
-      "status": "In Transit"
+      "status": "In Transit",
+      "disruption_cause": "Rhine River Low-Water Drought & Rail Freight Re-routing"
     },
     {
       "shipment_id": "SHP-8094",
@@ -286,11 +289,12 @@
       "origin": "Penang, MY",
       "destination": "Reno, US",
       "expected_delivery": "2026-09-13",
-      "actual_delivery": "2026-09-16",
-      "delay_days": 3,
-      "route_risk": 0.68,
+      "actual_delivery": "2026-09-19",
+      "delay_days": 6,
+      "route_risk": 0.88,
       "transport_mode": "Maritime",
-      "status": "Delayed"
+      "status": "Severely Delayed",
+      "disruption_cause": "Red Sea Missile Attacks & Malacca Strait Maritime Congestion Spillover"
     },
     {
       "shipment_id": "SHP-8095",
@@ -303,7 +307,8 @@
       "delay_days": 0,
       "route_risk": 0.15,
       "transport_mode": "Maritime",
-      "status": "On Schedule"
+      "status": "On Schedule",
+      "disruption_cause": "Normal Atlantic Transit"
     },
     {
       "shipment_id": "SHP-8096",
@@ -316,7 +321,8 @@
       "delay_days": 6,
       "route_risk": 0.79,
       "transport_mode": "Maritime",
-      "status": "Severely Delayed"
+      "status": "Severely Delayed",
+      "disruption_cause": "Panama Canal Drought Capacity Cap & US West Coast Port Congestion"
     },
     {
       "shipment_id": "SHP-8097",
@@ -329,7 +335,8 @@
       "delay_days": 1,
       "route_risk": 0.35,
       "transport_mode": "Maritime",
-      "status": "In Transit"
+      "status": "In Transit",
+      "disruption_cause": "Santos Port Berth Scheduling Wait"
     },
     {
       "shipment_id": "SHP-8098",
@@ -342,7 +349,70 @@
       "delay_days": 0,
       "route_risk": 0.24,
       "transport_mode": "Air Freight",
-      "status": "On Schedule"
+      "status": "On Schedule",
+      "disruption_cause": "Normal Trans-Pacific Air Cargo"
+    }
+  ],
+  "disruption_events": [
+    {
+      "id": "EVT-WAR-01",
+      "type": "Geopolitical Conflict / War",
+      "severity": "CRITICAL",
+      "title": "Red Sea Missile Assaults Force Cape of Good Hope Diversions",
+      "region": "Red Sea & Suez Canal Corridor",
+      "impact": "+12 to +16 Transit Days",
+      "affected_corridors": ["Asia-to-Europe Maritime", "Asia-to-US East Coast"],
+      "affected_suppliers": ["SUP001", "SUP004", "SUP008"],
+      "status": "Active Threat",
+      "description": "Armed attacks on commercial container vessels through Bab el-Mandeb have forced 85% of container fleet traffic to divert around Africa, adding 3,500 nautical miles, 14 days delay, and $2,800/FEU bunker fuel surcharges."
+    },
+    {
+      "id": "EVT-NAT-02",
+      "type": "Natural Disaster / Storm",
+      "severity": "CRITICAL",
+      "title": "Category 5 Super Typhoon Yagi Floods Northern Vietnam Tech Hubs",
+      "region": "Southeast Asia (Haiphong, Vietnam & Hainan)",
+      "impact": "Severe Factory Outage & +7 Days Port Backlog",
+      "affected_corridors": ["Haiphong-Chicago Lane", "South China Sea Corridors"],
+      "affected_suppliers": ["SUP008", "SUP004"],
+      "status": "Active Threat",
+      "description": "Submerged industrial export processing zones, destroyed coastal cranes, and grid collapse have paralyzed sensor and optic component manufacturing in Haiphong, with force majeure declared across Tier-1 sub-assemblers."
+    },
+    {
+      "id": "EVT-GEO-03",
+      "type": "Military Exercises & Embargo",
+      "severity": "HIGH",
+      "title": "Taiwan Strait Military Drills & Airspace Exclusion Zones",
+      "region": "Taiwan Strait & East China Sea",
+      "impact": "+48h Freight Re-routing & Insurance Premium Surges",
+      "affected_corridors": ["Taipei Air Freight", "Shenzhen-Chicago Maritime"],
+      "affected_suppliers": ["SUP001", "SUP002"],
+      "status": "Monitored",
+      "description": "Simulated live-fire blockades and navigational warnings have restricted sea lanes along shipping lane A533, triggering war-risk insurance surcharges and rerouting cargo flights over Japanese airspace."
+    },
+    {
+      "id": "EVT-CLIM-04",
+      "type": "Severe Climate Disaster",
+      "severity": "HIGH",
+      "title": "Historic Drought Stalls Panama Canal Daily Vessel Transits",
+      "region": "Central America (Panama Canal)",
+      "impact": "-33% Daily Vessel Capacity & +9 Days Queue",
+      "affected_corridors": ["Pacific-to-Atlantic Maritime", "US East Coast Inbound"],
+      "affected_suppliers": ["SUP001", "SUP004", "SUP006"],
+      "status": "Active Threat",
+      "description": "Gatun Lake reservoir levels remain critically depressed, capping daily transit booking slots from 36 down to 24 ships and forcing container ships to unload weight onto parallel rail bridges."
+    },
+    {
+      "id": "EVT-LAB-05",
+      "type": "Infrastructure & Labor Strike",
+      "severity": "MEDIUM",
+      "title": "North European Rail Freight Bottlenecks & Low Rhine Navigation",
+      "region": "Central Europe (Germany & Netherlands)",
+      "impact": "+3 to +5 Days Intermodal Lag",
+      "affected_corridors": ["Dresden-Rotterdam Rail Corridor"],
+      "affected_suppliers": ["SUP003"],
+      "status": "Active Threat",
+      "description": "Low summer water levels on the Rhine Kaub gauge force barges to load at only 40% cargo capacity, pushing excess bulk freight onto congested German rail lines and delaying semiconductor raw material inputs."
     }
   ]
 }

@@ -19,7 +19,8 @@ let dbStore = {
   suppliers: [...fallbackData.suppliers],
   products: [...fallbackData.products],
   inventory: [...fallbackData.inventory],
-  shipments: [...fallbackData.shipments]
+  shipments: [...fallbackData.shipments],
+  disruption_events: [...(fallbackData.disruption_events || [])]
 };
 
 // 1. Health check endpoint
@@ -54,30 +55,43 @@ app.get('/api/dashboard/summary', async (req, res) => {
     critical_disruptions: criticalDisruptions,
     inventory_risk_percentage: inventoryRiskPct,
     active_shipments_count: dbStore.shipments.length,
+    active_disasters_count: dbStore.disruption_events.filter(e => e.severity === 'CRITICAL').length,
     external_threat_level: "Elevated",
     recent_alerts: [
       {
-        id: "ALT-101",
+        id: "ALT-WAR-01",
         severity: "CRITICAL",
+        category: "WAR & GEOPOLITICAL",
+        entity: "Red Sea & Suez Maritime Corridor",
+        message: "Houthi drone/missile strikes forcing 14-day Cape of Good Hope diversions for Asia-Europe shipments.",
+        timestamp: "5 mins ago"
+      },
+      {
+        id: "ALT-NAT-02",
+        severity: "CRITICAL",
+        category: "NATURAL DISASTER",
+        entity: "Super Typhoon Yagi (Haiphong Port & Industrial Zone)",
+        message: "Category 5 typhoon causes flash floods, coastal port shutdowns, and Tier-1 sub-assembly delays.",
+        timestamp: "18 mins ago"
+      },
+      {
+        id: "ALT-GEO-03",
+        severity: "HIGH",
+        category: "MILITARY DRILLS",
+        entity: "Taiwan Strait Air/Sea Exclusion Zone",
+        message: "Simulated blockade operations cause air freight deviations and commercial insurance surcharges.",
+        timestamp: "42 mins ago"
+      },
+      {
+        id: "ALT-101",
+        severity: "HIGH",
+        category: "SUPPLIER DISRUPTION",
         entity: "Supplier SUP001 (Global Components Ltd.)",
         message: "86% Disruption risk probability flagged by XGBoost model due to delivery delays.",
-        timestamp: "10 mins ago"
-      },
-      {
-        id: "ALT-102",
-        severity: "HIGH",
-        entity: "Product P001 (Industrial Controller X1)",
-        message: "Low inventory coverage (6.2 days) vs surging 14-day demand forecast.",
-        timestamp: "25 mins ago"
-      },
-      {
-        id: "ALT-103",
-        severity: "MEDIUM",
-        entity: "Transit Lane SHP-8091 (Shenzhen -> Chicago)",
-        message: "Pacific route risk elevated (82%) with port congestion delays.",
         timestamp: "1 hour ago"
       }
-    ]
+    ],
+    disruption_events: dbStore.disruption_events
   });
 });
 
@@ -142,10 +156,53 @@ app.post('/api/products', async (req, res) => {
     unit_cost: Number(payload.unit_cost) || 150.0,
     lead_time_days: Number(payload.lead_time_days) || 14,
     primary_supplier_id: payload.primary_supplier_id || 'SUP001',
-    backup_supplier_id: payload.backup_supplier_id || 'SUP002'
+    backup_supplier_id: payload.backup_supplier_id || 'SUP002',
+    daily_consumption_rate: Number(payload.daily_consumption_rate) || 45
   };
+  
+  // Also create inventory record for new product so inventory/demand stays coherent
+  const newInv = {
+    product_id: newProd.product_id,
+    current_stock: Number(payload.initial_stock) || 500,
+    safety_stock: Number(payload.safety_stock) || 600,
+    reorder_point: Number(payload.reorder_point) || 400,
+    economic_order_quantity: 500,
+    inventory_days: Number(((Number(payload.initial_stock) || 500) / (Number(payload.daily_consumption_rate) || 45)).toFixed(1)),
+    holding_cost_annual: 450.0,
+    stockout_risk: (Number(payload.initial_stock) || 500) < (Number(payload.safety_stock) || 600) ? "High" : "Low",
+    warehouse_location: payload.warehouse_location || "Central Hub Chicago"
+  };
+  
   dbStore.products.push(newProd);
-  res.status(201).json({ status: 'success', product: newProd });
+  dbStore.inventory.push(newInv);
+  res.status(201).json({ status: 'success', product: newProd, inventory: newInv });
+});
+
+// 6b. Disruption Events Feed (Wars, Natural Disasters, Geopolitical Shocks)
+app.get('/api/disruptions', (req, res) => {
+  res.json({
+    total_events: dbStore.disruption_events.length,
+    active_threat_level: "ELEVATED",
+    events: dbStore.disruption_events
+  });
+});
+
+app.post('/api/disruptions', (req, res) => {
+  const payload = req.body;
+  const newEvent = {
+    id: payload.id || `EVT-${Date.now().toString().slice(-4)}`,
+    type: payload.type || "Supply Line Alert",
+    severity: payload.severity || "HIGH",
+    title: payload.title || "Supply Route Incident",
+    region: payload.region || "Global Maritime",
+    impact: payload.impact || "+5 to +10 Days Delay",
+    affected_corridors: payload.affected_corridors || ["Global Maritime"],
+    affected_suppliers: payload.affected_suppliers || ["SUP001"],
+    status: payload.status || "Active Threat",
+    description: payload.description || "Operational disturbance flagged along commercial freight corridor."
+  };
+  dbStore.disruption_events.unshift(newEvent);
+  res.status(201).json({ status: 'success', event: newEvent });
 });
 
 // 7. Overall Risk Overview
@@ -297,9 +354,16 @@ app.post('/api/analyze', async (req, res) => {
     }
   } catch (e) { /* ML service offline, use computed fallback */ }
 
+  // Check if any active disaster/war affects this supplier's location or shipments
+  const activeDisasters = dbStore.disruption_events.filter(e => 
+    (e.affected_suppliers && e.affected_suppliers.includes(sid)) ||
+    (sup.location && e.description.toLowerCase().includes(sup.location.split(',')[0].toLowerCase()))
+  );
+  const disasterPenalty = activeDisasters.length > 0 ? (activeDisasters[0].severity === 'CRITICAL' ? 0.15 : 0.08) : 0;
+
   // Use ML service probability if available, otherwise compute from supplier attributes
-  const baseProb = Number((sup.delay_rate * 1.5 + (1 - sup.reliability) * 0.8).toFixed(2));
-  const calculatedProb = Math.min(0.99, Math.max(0.12, mlRiskProb !== null ? mlRiskProb : baseProb));
+  const baseProb = Number((sup.delay_rate * 1.5 + (1 - sup.reliability) * 0.8 + disasterPenalty).toFixed(2));
+  const calculatedProb = Math.min(0.99, Math.max(0.12, mlRiskProb !== null ? Math.min(0.99, mlRiskProb + disasterPenalty) : baseProb));
   const calculatedScore = Math.round(calculatedProb * 100);
   const calculatedLevel = calculatedScore > 75 ? "Critical" : (calculatedScore > 40 ? "High" : "Low");
 
@@ -409,7 +473,9 @@ app.post('/api/analyze', async (req, res) => {
       root_cause_breakdown: [
         `Historical delay rate (${Math.round(sup.delay_rate * 100)}%) and lead time variability (${sup.average_lead_time}d avg) trigger recurring shipment latency.`,
         `Current inventory (${invData.current_stock} units / ${invData.inventory_days}d coverage) is ${stockoutPredicted ? 'inadequate' : 'sufficient'} for 14-day projected demand of ${totalProjDemand} units for ${prod.product_name}.`,
-        `Origin transit corridor (${sup.location}) exhibits ${Math.round(routeRisk * 100)}% route risk with ${sup.country_risk > 0.4 ? 'elevated' : 'moderate'} geopolitical exposure.`
+        activeDisasters.length > 0 
+          ? `ACTIVE THREAT: ${activeDisasters[0].title} (${activeDisasters[0].impact}) directly impacts transit corridors for ${sup.location}.`
+          : `Origin transit corridor (${sup.location}) exhibits ${Math.round(routeRisk * 100)}% route risk with ${sup.country_risk > 0.4 ? 'elevated' : 'moderate'} geopolitical exposure.`
       ],
       strategic_recommendation: `Execute proactive 40% volume reallocation to ${backupSup.supplier_name} and trigger buffer replenishment for ${prod.product_name}.`,
       source: "SupplySenseAI Dynamic Intelligence Engine"

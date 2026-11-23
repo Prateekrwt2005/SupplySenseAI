@@ -1,19 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Plane, Ship, ArrowRight } from 'lucide-react';
+import { Plane, Ship, ArrowRight, AlertTriangle, ShieldAlert, Flame, CloudLightning, Anchor, Plus, X } from 'lucide-react';
 import RiskBadge from '../components/RiskBadge';
-import { fetchShipments } from '../services/api';
+import { fetchShipments, fetchDisruptions, createDisruptionEvent } from '../services/api';
 
 export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
   const [shipments, setShipments] = useState([]);
+  const [disruptions, setDisruptions] = useState([]);
   const [filterMode, setFilterMode] = useState('ALL');
+  const [showAddEventModal, setShowAddEventModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    type: 'Geopolitical Conflict / War',
+    severity: 'CRITICAL',
+    region: 'Taiwan Strait & South China Sea',
+    impact: '+7 to +10 Days Delay',
+    affected_corridors: 'Asia-to-US Pacific Lane',
+    affected_suppliers: 'SUP001, SUP002',
+    description: ''
+  });
+
+  const loadData = async () => {
+    const [sData, dData] = await Promise.all([
+      fetchShipments(),
+      fetchDisruptions()
+    ]);
+    setShipments(sData || []);
+    setDisruptions(dData?.events || []);
+  };
 
   useEffect(() => {
-    async function load() {
-      const data = await fetchShipments();
-      setShipments(data || []);
-    }
-    load();
+    loadData();
   }, []);
+
+  const handleAddEventSubmit = async (e) => {
+    e.preventDefault();
+    if (!newEvent.title.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        ...newEvent,
+        affected_corridors: newEvent.affected_corridors.split(',').map(c => c.trim()),
+        affected_suppliers: newEvent.affected_suppliers.split(',').map(s => s.trim())
+      };
+      const res = await createDisruptionEvent(payload);
+      if (res && res.event) {
+        setDisruptions(prev => [res.event, ...prev]);
+      }
+      setShowAddEventModal(false);
+      setNewEvent({
+        title: '',
+        type: 'Geopolitical Conflict / War',
+        severity: 'CRITICAL',
+        region: 'Taiwan Strait & South China Sea',
+        impact: '+7 to +10 Days Delay',
+        affected_corridors: 'Asia-to-US Pacific Lane',
+        affected_suppliers: 'SUP001, SUP002',
+        description: ''
+      });
+    } catch (err) {
+      console.error('Failed to create disruption event:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const filtered = shipments.filter(
     (s) => filterMode === 'ALL' || s.transport_mode === filterMode
@@ -24,11 +74,19 @@ export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Active Shipments & Transit Corridors</h2>
-          <p className="text-xs text-zinc-400 mt-0.5 font-normal">Tracking maritime lanes, air freight corridors, and port delay probabilities</p>
+          <h2 className="text-xl font-bold text-white tracking-tight">Active Shipments, Transit Corridors & Global Disruptions</h2>
+          <p className="text-xs text-zinc-400 mt-0.5 font-normal">Live telematics tracking maritime chokepoints, conflict zones, and disaster impacts</p>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAddEventModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Report Route Disruption
+          </button>
+
           <select
             value={filterMode}
             onChange={(e) => setFilterMode(e.target.value)}
@@ -38,6 +96,60 @@ export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
             <option value="Maritime">Maritime (Ocean)</option>
             <option value="Air Freight">Air Freight</option>
           </select>
+        </div>
+      </div>
+
+      {/* Global Supply Line Threat Feed: Wars, Natural Disasters & Embargoes */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between pb-1">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+              <Flame className="w-4 h-4 text-red-400" />
+              Live Geopolitical & Disaster Disruption Feed ({disruptions.length} Active Events)
+            </h3>
+          </div>
+          <span className="text-[11px] font-mono text-red-400 bg-red-950/60 border border-red-500/30 px-2 py-0.5 rounded font-bold">
+            THREAT POSTURE: ELEVATED
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {disruptions.map((evt) => {
+            const isCrit = evt.severity === 'CRITICAL';
+            return (
+              <div 
+                key={evt.id}
+                className={`human-card rounded-lg p-4 border transition-all flex flex-col justify-between ${
+                  isCrit ? 'border-red-500/50 bg-red-950/20' : 'border-amber-500/40 bg-amber-950/20'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded font-mono bg-zinc-900 border border-zinc-800 text-zinc-300">
+                      {evt.type}
+                    </span>
+                    <RiskBadge level={evt.severity} />
+                  </div>
+                  <h4 className="font-bold text-white text-xs leading-snug">
+                    {evt.title}
+                  </h4>
+                  <div className="text-[11px] font-semibold text-red-400 mt-1.5 flex items-center gap-1 font-mono">
+                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                    <span>Impact: {evt.impact}</span>
+                  </div>
+                  <p className="text-zinc-400 text-[11px] mt-2 leading-relaxed font-normal">
+                    {evt.description}
+                  </p>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400 font-mono">
+                  <span>Region: {evt.region}</span>
+                  <span className="text-zinc-300 font-semibold">{evt.status}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -114,6 +226,11 @@ export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
                         <ArrowRight className="w-3 h-3 text-zinc-500" />
                         <span>{s.destination}</span>
                       </div>
+                      {s.disruption_cause && (
+                        <div className="text-[10px] text-amber-400 font-mono mt-0.5 max-w-xs truncate" title={s.disruption_cause}>
+                          &bull; {s.disruption_cause}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[11px]">
@@ -158,6 +275,123 @@ export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
           </table>
         </div>
       </div>
+
+      {/* Report Disruption Modal */}
+      {showAddEventModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="human-card rounded-lg p-6 border-zinc-700 max-w-lg w-full space-y-4 bg-[#121215]">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Flame className="w-4 h-4 text-red-500" />
+                Report Supply Line Disruption / Disaster
+              </h3>
+              <button 
+                onClick={() => setShowAddEventModal(false)}
+                className="text-zinc-400 hover:text-white p-1 text-sm font-mono"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEventSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Disruption Title / Event Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Strait of Hormuz Tanker Seizures & Maritime Blockade"
+                  value={newEvent.title}
+                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Disruption Category</label>
+                  <select
+                    value={newEvent.type}
+                    onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white"
+                  >
+                    <option value="Geopolitical Conflict / War">Geopolitical Conflict / War</option>
+                    <option value="Natural Disaster / Storm">Natural Disaster / Storm</option>
+                    <option value="Military Exercises & Embargo">Military Exercises & Embargo</option>
+                    <option value="Severe Climate Disaster">Severe Climate Disaster</option>
+                    <option value="Port Congestion / Labor Strike">Port Congestion / Labor Strike</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Threat Severity</label>
+                  <select
+                    value={newEvent.severity}
+                    onChange={(e) => setNewEvent({ ...newEvent, severity: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white"
+                  >
+                    <option value="CRITICAL">CRITICAL</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Affected Geographic Region</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Persian Gulf & Red Sea"
+                    value={newEvent.region}
+                    onChange={(e) => setNewEvent({ ...newEvent, region: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Transit Impact Delay</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. +10 to +14 Days Delay"
+                    value={newEvent.impact}
+                    onChange={(e) => setNewEvent({ ...newEvent, impact: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Impact Description & Supply Line Ramifications</label>
+                <textarea
+                  rows="3"
+                  required
+                  placeholder="Detail the root cause (e.g., naval shelling, typhoon flooding, canal lock shutdown) and how it impedes container vessel movement."
+                  value={newEvent.description}
+                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-white focus:outline-none focus:border-white resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddEventModal(false)}
+                  className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white font-bold disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Publishing...' : 'Broadcast Alert'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
