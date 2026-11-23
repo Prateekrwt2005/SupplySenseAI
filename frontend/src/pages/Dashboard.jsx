@@ -86,7 +86,7 @@ export default function Dashboard({ onNavigateToAnalysis }) {
           onClick={() => onNavigateToAnalysis('SUP001', 'P001')}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex-shrink-0"
         >
-          <span>Analyze Demo Node (SUP001)</span>
+          <span>Launch Disruption Risk Engine</span>
           <ArrowUpRight className="w-4 h-4" />
         </button>
       </div>
@@ -243,11 +243,10 @@ export default function Dashboard({ onNavigateToAnalysis }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60 font-medium">
-                {suppliers.slice(0, 5).map((s) => {
-                  const isCritical = s.supplier_id === 'SUP001' || s.delay_rate >= 0.35;
-                  const isHigh = !isCritical && s.delay_rate >= 0.25;
-                  const level = isCritical ? 'Critical' : (isHigh ? 'High' : (s.delay_rate > 0.1 ? 'Medium' : 'Low'));
-                  const score = isCritical ? 86 : Math.round(s.delay_rate * 100);
+                {suppliers.slice(0, 8).map((s) => {
+                  const calculatedScore = Math.round(((1 - (s.reliability || 0.85)) * 0.55 + (s.delay_rate || 0.1) * 0.45) * 100);
+                  const score = Math.min(99, Math.max(10, calculatedScore));
+                  const level = score > 75 ? 'Critical' : (score > 40 ? 'High' : (score > 20 ? 'Medium' : 'Low'));
 
                   return (
                     <tr key={s.supplier_id} className="hover:bg-zinc-900/60 transition-colors">

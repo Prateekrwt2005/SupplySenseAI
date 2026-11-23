@@ -131,10 +131,9 @@ export default function Suppliers({ onNavigateToAnalysis }) {
             </thead>
             <tbody className="divide-y divide-zinc-800/60 font-medium">
               {filtered.map((s) => {
-                const isCrit = s.supplier_id === 'SUP001' || (s.delay_rate || 0) >= 0.35;
-                const isHigh = !isCrit && (s.delay_rate || 0) >= 0.25;
-                const level = isCrit ? 'Critical' : (isHigh ? 'High' : ((s.delay_rate || 0) > 0.12 ? 'Medium' : 'Low'));
-                const score = isCrit ? 86 : Math.round((s.delay_rate || 0.1) * 100);
+                const calculatedScore = Math.round(((1 - (s.reliability || 0.85)) * 0.55 + (s.delay_rate || 0.1) * 0.45) * 100);
+                const score = Math.min(99, Math.max(10, calculatedScore));
+                const level = score > 75 ? 'Critical' : (score > 40 ? 'High' : (score > 20 ? 'Medium' : 'Low'));
 
                 return (
                   <tr key={s.supplier_id} className="hover:bg-zinc-900/60 transition-colors">
