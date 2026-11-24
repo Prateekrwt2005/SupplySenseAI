@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { id: 'risk-analysis', label: 'Risk Analysis', icon: Activity, badge: 'ML+SHAP' },
   { id: 'suppliers', label: 'Suppliers', icon: Building2 },
   { id: 'inventory-demand', label: 'Inventory & Demand', icon: Boxes },
-  { id: 'shipments-routes', label: 'Shipments & Routes', icon: Truck },
+  { id: 'shipments-routes', label: 'Shipments & Routes', icon: Truck, badge: 'MAP' },
   { id: 'recommendations', label: 'Recommendations', icon: Lightbulb },
   { id: 'ai-insights', label: 'AI Insights', icon: Sparkles, badge: 'LLM' },
   { id: 'architecture', label: 'Architecture', icon: Layers }
