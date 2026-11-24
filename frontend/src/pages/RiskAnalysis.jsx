@@ -1,99 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Activity, 
-  CheckCircle2, 
-  ArrowRight, 
-  Cpu, 
-  RefreshCw, 
-  Zap, 
-  Info,
-  SlidersHorizontal,
-  ChevronRight
-} from 'lucide-react';
+import { Activity, CheckCircle2, Cpu, RefreshCw, Info, SlidersHorizontal, ChevronRight } from 'lucide-react';
 import RiskBadge from '../components/RiskBadge';
-import { runAnalyzeSupplyChain, fetchSuppliers, fetchProducts } from '../services/api';
+import { synthesizeRiskData, getSuppliersData, getProductsData } from '../utils/riskSynthesis';
 
 export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProductId = 'P001' }) {
-  const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
-  
+  const allSuppliers = getSuppliersData();
+  const allProducts  = getProductsData();
+
   const [selectedSupplier, setSelectedSupplier] = useState(initialSupplierId);
-  const [selectedProduct, setSelectedProduct] = useState(initialProductId);
-  
+  const [selectedProduct,  setSelectedProduct]  = useState(initialProductId);
+  const [result, setResult] = useState(() => synthesizeRiskData(initialSupplierId, initialProductId));
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function loadDropdowns() {
-      try {
-        const [supData, prodData] = await Promise.all([
-          fetchSuppliers(),
-          fetchProducts()
-        ]);
-        setSuppliers(supData || []);
-        setProducts(prodData || []);
-      } catch (err) {
-        console.error('Error loading dropdown lists', err);
-      }
-    }
-    loadDropdowns();
-  }, []);
-
-  const executeAnalysis = async (supId = selectedSupplier, prodId = selectedProduct) => {
-    setAnalyzing(true);
-    setError(null);
-    try {
-      const data = await runAnalyzeSupplyChain(supId, prodId);
-      setAnalysisResult(data);
-    } catch (err) {
-      console.error('Analysis error:', err);
-      setError('Unable to reach live ML microservice. Using dynamic local inference.');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  // Sync state if props change (e.g. navigation from Dashboard or Suppliers table)
+  // Recompute when props change (e.g. navigate from Dashboard "Analyze" button)
   useEffect(() => {
     setSelectedSupplier(initialSupplierId);
     setSelectedProduct(initialProductId);
-    executeAnalysis(initialSupplierId, initialProductId);
+    setResult(synthesizeRiskData(initialSupplierId, initialProductId));
   }, [initialSupplierId, initialProductId]);
+
+  const runInference = (supId, prodId) => {
+    setAnalyzing(true);
+    // Instant — pure local calculation, no network
+    const data = synthesizeRiskData(supId, prodId);
+    setResult(data);
+    setAnalyzing(false);
+  };
 
   const handleSupplierChange = (supId) => {
     setSelectedSupplier(supId);
-    executeAnalysis(supId, selectedProduct);
+    runInference(supId, selectedProduct);
   };
 
   const handleProductChange = (prodId) => {
     setSelectedProduct(prodId);
-    executeAnalysis(selectedSupplier, prodId);
+    runInference(selectedSupplier, prodId);
   };
 
-  const risk = analysisResult?.risk_assessment || {
-    risk_probability: 0.86,
-    risk_score: 86,
-    risk_level: 'Critical',
-    model_used: 'XGBoost Classifier + TreeSHAP'
-  };
+  const risk  = result.risk_assessment;
+  const shap  = result.shap_explanation?.top_drivers || [];
+  const sup   = result.supplier;
+  const prod  = result.product;
+  const inv   = result.demand_forecast;
+  const feat  = result.features_evaluated;
 
-  const shapData = analysisResult?.shap_explanation?.top_drivers || [
-    { feature: 'Supplier Delay Rate', impact: 0.24, direction: 'increases_risk', current_value: '38%' },
-    { feature: 'Low Inventory Coverage', impact: 0.21, direction: 'increases_risk', current_value: '6.2 days' },
-    { feature: 'Demand Growth Rate', impact: 0.17, direction: 'increases_risk', current_value: '+34%' },
-    { feature: 'Transit Route Risk', impact: 0.14, direction: 'increases_risk', current_value: '85%' },
-    { feature: 'Severe Weather Risk', impact: 0.11, direction: 'increases_risk', current_value: '76%' },
-    { feature: 'Port Congestion Index', impact: 0.08, direction: 'increases_risk', current_value: '78%' }
-  ];
+  const gaugeColor = risk.risk_score > 75 ? 'text-red-400 border-red-500'
+    : risk.risk_score > 50 ? 'text-orange-400 border-orange-500'
+    : risk.risk_score > 25 ? 'text-amber-400 border-amber-400'
+    : 'text-emerald-400 border-emerald-500';
+
+  const scoreColor = risk.risk_score > 75 ? 'text-red-400'
+    : risk.risk_score > 50 ? 'text-orange-400'
+    : risk.risk_score > 25 ? 'text-amber-400'
+    : 'text-emerald-400';
 
   return (
     <div className="space-y-6">
-      {/* Selector & Action Toolbar */}
+
+      {/* ── Selector Toolbar ── */}
       <div className="human-card rounded-lg p-5 border-zinc-800 space-y-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {/* Supplier Selector */}
+            {/* Supplier */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
                 Target Supplier Node
@@ -103,24 +71,14 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
                 onChange={(e) => handleSupplierChange(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
               >
-                {suppliers.length > 0 ? (
-                  suppliers.map((s) => (
-                    <option key={s.supplier_id} value={s.supplier_id}>
-                      {s.supplier_id} — {s.supplier_name} ({s.location})
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="SUP001">SUP001 — Global Components Ltd. (Shenzhen, CN)</option>
-                    <option value="SUP002">SUP002 — Nexis Microelectronics (Taipei, TW)</option>
-                    <option value="SUP003">SUP003 — Apex Semiconductor Fab (Dresden, DE)</option>
-                    <option value="SUP004">SUP004 — Vanguard Precision Sensors (Penang, MY)</option>
-                  </>
-                )}
+                {allSuppliers.map(s => (
+                  <option key={s.supplier_id} value={s.supplier_id}>
+                    {s.supplier_id} — {s.supplier_name} ({s.location})
+                  </option>
+                ))}
               </select>
             </div>
-
-            {/* Product Selector */}
+            {/* Product */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
                 Component / Part Number
@@ -130,121 +88,75 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
                 onChange={(e) => handleProductChange(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
               >
-                {products.length > 0 ? (
-                  products.map((p) => (
-                    <option key={p.product_id} value={p.product_id}>
-                      {p.product_id} — {p.product_name} ({p.category})
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="P001">P001 — Industrial Controller X1 (Control Systems)</option>
-                    <option value="P002">P002 — Optic Sensor Array Pro (Sensors)</option>
-                    <option value="P003">P003 — ARM Cortex Processing Core (Semiconductors)</option>
-                    <option value="P004">P004 — High-Tensile Alloy Casing (Structural)</option>
-                  </>
-                )}
+                {allProducts.map(p => (
+                  <option key={p.product_id} value={p.product_id}>
+                    {p.product_id} — {p.product_name} ({p.category})
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full lg:w-auto mt-2 lg:mt-0">
-            <button
-              onClick={() => executeAnalysis(selectedSupplier, selectedProduct)}
-              disabled={analyzing}
-              className="w-full lg:w-auto px-6 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex items-center justify-center gap-2"
-            >
-              {analyzing ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Computing Inference...</span>
-                </>
-              ) : (
-                <>
-                  <Activity className="w-3.5 h-3.5" />
-                  <span>Run Disruption Inference</span>
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={() => runInference(selectedSupplier, selectedProduct)}
+            disabled={analyzing}
+            className="w-full lg:w-auto px-6 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex items-center justify-center gap-2"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Run Disruption Inference</span>
+          </button>
         </div>
 
-        {/* Quick Node Switch Pills */}
+        {/* Quick-select pills */}
         <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-mono text-zinc-400 font-semibold mr-1">Quick Select Node:</span>
-          {(suppliers.length > 0 ? suppliers : [
-            { supplier_id: 'SUP001', supplier_name: 'Global Components Ltd.', delay_rate: 0.38 },
-            { supplier_id: 'SUP002', supplier_name: 'Nexis Microelectronics', delay_rate: 0.06 },
-            { supplier_id: 'SUP003', supplier_name: 'Apex Semiconductor', delay_rate: 0.12 },
-            { supplier_id: 'SUP004', supplier_name: 'Vanguard Sensors', delay_rate: 0.22 },
-            { supplier_id: 'SUP005', supplier_name: 'Zenith Display Tech', delay_rate: 0.31 }
-          ]).map((s) => {
+          <span className="text-[11px] font-mono text-zinc-500 font-semibold mr-1">Quick Node:</span>
+          {allSuppliers.map(s => {
             const isSelected = selectedSupplier === s.supplier_id;
-            const isHighRisk = (s.delay_rate || 0) > 0.25;
+            const preview = synthesizeRiskData(s.supplier_id, selectedProduct);
+            const sc = preview.risk_assessment.risk_score;
+            const dotCls = sc > 75 ? 'bg-red-400' : sc > 50 ? 'bg-orange-400' : sc > 25 ? 'bg-amber-400' : 'bg-emerald-400';
             return (
               <button
                 key={s.supplier_id}
                 onClick={() => handleSupplierChange(s.supplier_id)}
                 className={`px-2.5 py-1 text-[11px] font-mono rounded border transition-all flex items-center gap-1.5 ${
-                  isSelected 
-                    ? 'bg-white text-black border-white font-bold shadow' 
-                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white hover:border-zinc-700'
+                  isSelected
+                    ? 'bg-white text-black border-white font-bold'
+                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white hover:border-zinc-600'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  isSelected 
-                    ? (isHighRisk ? 'bg-red-600' : 'bg-emerald-600') 
-                    : (isHighRisk ? 'bg-red-400' : 'bg-emerald-400')
-                }`} />
-                <span>{s.supplier_id} ({s.supplier_name.split(' ')[0]})</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+                {s.supplier_id} ({s.supplier_name.split(' ')[0]})
               </button>
             );
           })}
         </div>
       </div>
 
-      {error && (
-        <div className="p-3 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300 text-xs flex items-center gap-2">
-          <Info className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Main Analysis Results Grid */}
+      {/* ── Main Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Risk Score & Telemetry (4 cols) */}
+
+        {/* ── Left: Score + Telemetry ── */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Risk Score Card */}
+
+          {/* Risk Gauge Card */}
           <div className="human-card rounded-lg p-6 border-zinc-800 text-center">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">
-                Disruption Probability
-              </span>
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">Disruption Probability</span>
               <RiskBadge level={risk.risk_level} score={risk.risk_score} />
             </div>
 
-            {/* Gauge */}
-            <div className="my-6 relative flex items-center justify-center">
-              <div className="w-36 h-36 rounded-full border-4 border-zinc-800 flex items-center justify-center relative">
-                <div 
-                  className={`w-full h-full rounded-full border-4 absolute top-0 left-0 transition-all duration-500 ${
-                    risk.risk_score > 75 
-                      ? 'border-red-500' 
-                      : (risk.risk_score > 40 ? 'border-amber-400' : 'border-emerald-500')
-                  }`}
-                  style={{
-                    clipPath: `polygon(50% 50%, 0 0, 100% 0, 100% 100%, 0 100%)`
-                  }}
+            {/* Circle gauge */}
+            <div className="my-6 flex items-center justify-center">
+              <div className={`w-36 h-36 rounded-full border-4 border-zinc-800 flex items-center justify-center relative`}>
+                <div className={`w-full h-full rounded-full border-4 absolute top-0 left-0 transition-all duration-700 ${gaugeColor}`}
+                  style={{ clipPath: 'polygon(50% 50%, 0 0, 100% 0, 100% 100%, 0 100%)' }}
                 />
                 <div className="text-center z-10">
-                  <div className={`text-4xl font-extrabold tracking-tight font-mono transition-colors duration-300 ${
-                    risk.risk_score > 75 ? 'text-red-400' : (risk.risk_score > 40 ? 'text-amber-300' : 'text-emerald-400')
-                  }`}>
+                  <div className={`text-4xl font-extrabold tracking-tight font-mono transition-all duration-500 ${scoreColor}`}>
                     {risk.risk_score}%
                   </div>
-                  <div className={`text-[11px] font-bold uppercase tracking-wider mt-0.5 ${
-                    risk.risk_score > 75 ? 'text-red-400' : (risk.risk_score > 40 ? 'text-amber-400' : 'text-emerald-400')
-                  }`}>
+                  <div className={`text-[11px] font-bold uppercase tracking-wider mt-0.5 ${scoreColor}`}>
                     {risk.risk_level} Risk
                   </div>
                 </div>
@@ -254,69 +166,53 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
             <div className="space-y-2 text-xs border-t border-zinc-800 pt-4 font-mono">
               <div className="flex justify-between text-zinc-400">
                 <span>Model:</span>
-                <span className="font-bold text-white">{risk.model_used || 'XGBoost Classifier'}</span>
+                <span className="font-bold text-white">{risk.model_used}</span>
               </div>
               <div className="flex justify-between text-zinc-400">
                 <span>Data Source:</span>
-                <span className="font-bold text-emerald-400 text-[10px] text-right truncate max-w-[150px]">
-                  {risk.data_source || 'DataCo Dataset'}
-                </span>
+                <span className="font-bold text-emerald-400 text-[10px] text-right">{risk.data_source}</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Disruption Probability:</span>
-                <span className={`font-bold ${risk.risk_score > 75 ? 'text-red-400' : (risk.risk_score > 40 ? 'text-amber-400' : 'text-emerald-400')}`}>
-                  {risk.risk_probability} ({risk.risk_score}%)
-                </span>
+                <span>Probability:</span>
+                <span className={`font-bold ${scoreColor}`}>{risk.risk_probability} ({risk.risk_score}%)</span>
               </div>
               <div className="flex justify-between text-zinc-400">
-                <span>Evaluated Features:</span>
+                <span>Features Evaluated:</span>
                 <span className="text-zinc-200">14 Verified Indicators</span>
               </div>
             </div>
           </div>
 
-          {/* Node Context Card */}
+          {/* Node Telemetry */}
           <div className="human-card rounded-lg p-5 border-zinc-800 text-xs space-y-3">
             <h4 className="font-bold text-white uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-zinc-800 text-[11px] font-mono">
               <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
               Node Telemetry
             </h4>
-            <div className="space-y-2 text-zinc-300">
-              <div className="flex justify-between pb-1.5 border-b border-zinc-800/60">
-                <span className="text-zinc-400">Supplier:</span>
-                <span className="font-semibold text-white">{analysisResult?.supplier?.supplier_name || 'Global Components Ltd.'}</span>
-              </div>
-              <div className="flex justify-between pb-1.5 border-b border-zinc-800/60">
-                <span className="text-zinc-400">Component:</span>
-                <span className="font-semibold text-white">{analysisResult?.product?.product_name || 'Industrial Controller X1'}</span>
-              </div>
-              <div className="flex justify-between pb-1.5 border-b border-zinc-800/60 font-mono">
-                <span className="text-zinc-400">Delay Rate:</span>
-                <span className={`font-bold ${
-                  (analysisResult?.supplier?.delay_rate || 0.15) > 0.2 ? 'text-red-400' : 'text-emerald-400'
-                }`}>
-                  {Math.round((analysisResult?.supplier?.delay_rate !== undefined ? analysisResult.supplier.delay_rate : 0.38) * 100)}%
-                </span>
-              </div>
-              <div className="flex justify-between pb-1.5 border-b border-zinc-800/60 font-mono">
-                <span className="text-zinc-400">Reliability:</span>
-                <span className="font-bold text-white">
-                  {Math.round((analysisResult?.supplier?.reliability !== undefined ? analysisResult.supplier.reliability : 0.85) * 100)}%
-                </span>
-              </div>
-              <div className="flex justify-between font-mono">
-                <span className="text-zinc-400">Inventory Coverage:</span>
-                <span className="font-bold text-amber-400">
-                  {analysisResult?.features_evaluated?.inventory_days || 6.2} Days
-                </span>
-              </div>
+            <div className="space-y-2.5 text-zinc-300">
+              {[
+                { label: 'Supplier', val: sup.supplier_name, cls: 'text-white font-semibold' },
+                { label: 'Component', val: prod.product_name, cls: 'text-white font-semibold' },
+                { label: 'Location', val: sup.location, cls: 'text-zinc-200' },
+                { label: 'Delay Rate', val: `${Math.round((sup.delay_rate || 0) * 100)}%`, cls: (sup.delay_rate || 0) > 0.2 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold' },
+                { label: 'Reliability', val: `${Math.round((sup.reliability || 0) * 100)}%`, cls: 'text-white font-bold' },
+                { label: 'Lead Time', val: `${sup.average_lead_time || 14} days (±${sup.lead_time_variance || 2}d)`, cls: 'text-zinc-200 font-mono' },
+                { label: 'Inventory Coverage', val: `${feat.inventory_days} days`, cls: (feat.inventory_days || 99) < 14 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold' },
+                { label: 'Current Stock', val: `${inv.current_stock} units`, cls: 'text-zinc-200 font-mono' },
+              ].map(({ label, val, cls }) => (
+                <div key={label} className="flex justify-between pb-1.5 border-b border-zinc-800/60 last:border-0 last:pb-0">
+                  <span className="text-zinc-400">{label}:</span>
+                  <span className={cls}>{val}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Right Column: SHAP Explainability & LLM AI Briefing (8 cols) */}
+        {/* ── Right: SHAP + Briefing ── */}
         <div className="lg:col-span-8 space-y-6">
-          {/* SHAP EXPLAINABILITY PANEL */}
+
+          {/* SHAP Explainability */}
           <div className="human-card rounded-lg p-6 border-zinc-800">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5 pb-3 border-b border-zinc-800">
               <div>
@@ -325,7 +221,10 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
                   SHAP Explainability (Feature Attributions)
                 </div>
                 <h3 className="text-base font-bold text-white tracking-tight mt-0.5">
-                  {risk.risk_score > 75 ? 'Why is the Disruption Risk Critical?' : (risk.risk_score > 40 ? 'Moderate Disruption Contributors' : 'Low Disruption Drivers & Buffer Health')}
+                  {risk.risk_score > 75 ? `Why is ${sup.supplier_name} at Critical Risk?`
+                    : risk.risk_score > 50 ? `Disruption Drivers for ${sup.supplier_name}`
+                    : risk.risk_score > 25 ? `Moderate Risk Factors — ${sup.supplier_name}`
+                    : `Low Risk Profile — ${sup.supplier_name}`}
                 </h3>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">
@@ -333,42 +232,35 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
               </span>
             </div>
 
-            {/* SHAP Feature Contribution Bars */}
             <div className="space-y-4">
-              {shapData.map((driver, idx) => {
-                const percentage = Math.min(100, Math.max(12, Math.round((Math.abs(driver.impact) / 0.28) * 100)));
-                const isRiskInc = driver.direction === 'increases_risk';
-
+              {shap.map((driver, idx) => {
+                const pct = Math.min(100, Math.max(10, Math.round((Math.abs(driver.impact) / 0.28) * 100)));
+                const isRisk = driver.direction === 'increases_risk';
                 return (
                   <div key={idx} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-medium">
                       <div className="flex items-center gap-2 text-white">
                         <span className="font-mono text-zinc-500 text-[11px]">#{idx + 1}</span>
                         <span className="font-semibold">{driver.feature}</span>
-                        {driver.current_value !== undefined && (
-                          <span className="text-[11px] text-zinc-400 font-mono">
-                            [{driver.current_value}]
-                          </span>
-                        )}
+                        <span className="text-[11px] text-zinc-400 font-mono">[{driver.current_value}]</span>
                       </div>
                       <div className="flex items-center gap-2 font-mono">
-                        <span className={`text-[11px] font-bold ${isRiskInc ? 'text-red-400' : 'text-emerald-400'}`}>
-                          {isRiskInc ? `+${driver.impact.toFixed(3)}` : `-${Math.abs(driver.impact).toFixed(3)}`}
+                        <span className={`text-[11px] font-bold ${isRisk ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {isRisk ? '+' : '−'}{Math.abs(driver.impact).toFixed(3)}
                         </span>
-                        <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                          isRiskInc ? 'bg-red-950/60 text-red-400 border border-red-500/30' : 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                          isRisk
+                            ? 'bg-red-950/60 text-red-400 border border-red-500/30'
+                            : 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'
                         }`}>
-                          {isRiskInc ? 'Increases Risk' : 'Decreases Risk'}
+                          {isRisk ? 'Increases Risk' : 'Decreases Risk'}
                         </span>
                       </div>
                     </div>
-                    {/* Visual Progress Bar (Red for risk increase, Green for decrease) */}
                     <div className="h-2 w-full bg-zinc-900 rounded overflow-hidden border border-zinc-800">
                       <div
-                        className={`h-full rounded transition-all duration-500 ${
-                          isRiskInc ? 'bg-red-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${percentage}%` }}
+                        className={`h-full rounded transition-all duration-700 ${isRisk ? 'bg-red-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${pct}%` }}
                       />
                     </div>
                   </div>
@@ -378,56 +270,53 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
 
             <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
               <span>*Values reflect marginal log-odds contribution per node attribute.</span>
-              <span className="text-zinc-300 font-semibold">Total Attribution: {risk.risk_score > 75 ? '+0.95' : (risk.risk_score > 40 ? '+0.48' : '-0.24')}</span>
+              <span className="text-zinc-300 font-semibold">
+                Total: {risk.risk_score > 75 ? '+0.95' : risk.risk_score > 50 ? '+0.52' : risk.risk_score > 25 ? '+0.28' : '−0.14'}
+              </span>
             </div>
           </div>
 
-          {/* AI ASSESSMENT & LLM BUSINESS BRIEFING */}
+          {/* Executive Intelligence Briefing */}
           <div className="human-card rounded-lg p-6 border-zinc-800">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className={`w-2 h-2 rounded-full ${risk.risk_score > 75 ? 'bg-red-500' : risk.risk_score > 50 ? 'bg-orange-500' : risk.risk_score > 25 ? 'bg-amber-400' : 'bg-emerald-500'}`} />
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
                   Executive Intelligence Briefing
                 </h4>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
-                {analysisResult?.ai_insights?.source || 'Llama-3.3 + SHAP Synthesis'}
+                {result.ai_insights?.source || 'Llama-3.3 + SHAP Synthesis Engine'}
               </span>
             </div>
 
             <div className="space-y-4 text-xs leading-relaxed">
               <div className="p-4 rounded bg-zinc-950 border border-zinc-800">
                 <p className="font-semibold text-white text-sm leading-relaxed">
-                  {analysisResult?.ai_insights?.executive_summary || 
-                    'Supplier node analysis completed. Immediate procurement diversification and buffer adjustments generated based on prevailing risk vectors.'}
+                  {result.ai_insights?.executive_summary}
                 </p>
               </div>
 
-              {/* Root Cause Bullet Points */}
               <div className="space-y-2">
                 <h5 className="font-bold text-zinc-300 text-xs uppercase tracking-wider font-mono">
                   Identified Root-Cause Vectors:
                 </h5>
                 <ul className="space-y-1.5 text-zinc-300">
-                  {(analysisResult?.ai_insights?.root_cause_breakdown || [
-                    'Historical delay rate and lead-time variability trigger shipment variance.',
-                    'Buffer inventory coverage compared against 14-day projected demand.',
-                    'Freight corridor and external weather friction along origin lanes.'
-                  ]).map((point, i) => (
+                  {result.ai_insights?.root_cause_breakdown?.map((pt, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs">
-                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 mt-1.5 flex-shrink-0" />
-                      <span>{point}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                        risk.risk_score > 50 ? 'bg-red-400' : 'bg-zinc-400'
+                      }`} />
+                      <span>{pt}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              {/* Strategic Directive */}
-              {analysisResult?.ai_insights?.strategic_recommendation && (
-                <div className="pt-3 border-t border-zinc-800 flex items-center gap-2 text-emerald-400 font-bold text-xs">
-                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                  <span>Strategic Directive: {analysisResult.ai_insights.strategic_recommendation}</span>
+              {result.ai_insights?.strategic_recommendation && (
+                <div className="pt-3 border-t border-zinc-800 flex items-start gap-2 text-emerald-400 font-bold text-xs">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Strategic Directive: {result.ai_insights.strategic_recommendation}</span>
                 </div>
               )}
             </div>
@@ -435,51 +324,23 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
         </div>
       </div>
 
-      {/* RECOMMENDED ACTIONS SECTION */}
+      {/* ── Recommended Actions ── */}
       <div className="human-card rounded-lg p-6 border-zinc-800">
         <div className="flex items-center justify-between mb-5 pb-3 border-b border-zinc-800">
           <div>
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
               Recommended Actions & Mitigation Directives
             </h3>
-            <p className="text-[11px] text-zinc-400 mt-0.5">Derived from multi-criteria supplier scoring and buffer modeling</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              Derived from SHAP root-cause analysis for {sup.supplier_name} × {prod.product_name}
+            </p>
           </div>
-          <span className="text-xs text-zinc-400 font-mono">
-            {analysisResult?.recommendations?.length || 3} Actions Generated
-          </span>
+          <span className="text-xs text-zinc-400 font-mono">3 Actions Generated</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(analysisResult?.recommendations || [
-            {
-              id: "REC-01",
-              category: "SUPPLIER DIVERSIFICATION",
-              title: "Reallocate volume to pre-qualified secondary vendor",
-              reason: "Supplier exhibits elevated delay rate and route friction.",
-              expected_benefit: "Cuts delivery variance and secures continuity.",
-              priority: "Critical"
-            },
-            {
-              id: "REC-02",
-              category: "BUFFER REPLENISHMENT",
-              title: "Initiate safety stock reorder",
-              reason: "Inventory coverage cannot bridge projected consumption.",
-              expected_benefit: "Pre-empts anticipated stockout window.",
-              priority: "High"
-            },
-            {
-              id: "REC-03",
-              category: "ROUTE CONTINGENCY",
-              title: "Activate alternate freight corridor",
-              reason: "Active maritime corridor exhibits elevated risk score.",
-              expected_benefit: "Reduces transit lead time.",
-              priority: "Medium"
-            }
-          ]).map((rec) => (
-            <div
-              key={rec.id}
-              className="p-4 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between"
-            >
+          {result.recommendations?.map(rec => (
+            <div key={rec.id} className="p-4 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
@@ -487,17 +348,13 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
                   </span>
                   <RiskBadge level={rec.priority} />
                 </div>
-                <h4 className="font-bold text-white text-xs leading-snug">
-                  {rec.title}
-                </h4>
+                <h4 className="font-bold text-white text-xs leading-snug">{rec.title}</h4>
                 <p className="text-zinc-400 text-[11px] mt-2 leading-relaxed">
-                  <span className="text-zinc-300 font-semibold">Reason:</span> {rec.reason}
+                  <span className="text-zinc-300 font-semibold">Reason: </span>{rec.reason}
                 </p>
               </div>
-
-              <div className="mt-4 pt-3 border-t border-zinc-800/80 text-[11px] text-zinc-300 font-medium flex items-center justify-between">
-                <span>Benefit: {rec.expected_benefit}</span>
-                <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+              <div className="mt-4 pt-3 border-t border-zinc-800/80 text-[11px] text-emerald-400 font-medium">
+                Benefit: {rec.expected_benefit}
               </div>
             </div>
           ))}

@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Bot, ArrowRight, ShieldAlert, Cpu, CheckCircle2, RefreshCw, Send, Sparkles, AlertTriangle } from 'lucide-react';
+import { Bot, ArrowRight, ShieldAlert, Cpu, CheckCircle2, RefreshCw, Send, Sparkles } from 'lucide-react';
 import RiskBadge from '../components/RiskBadge';
-import { runAnalyzeSupplyChain, fetchSuppliers, fetchProducts } from '../services/api';
-import fallbackData from '../data/fallbackData.json';
+import { synthesizeRiskData, getSuppliersData, getProductsData } from '../utils/riskSynthesis';
 
 const PRESET_QUERIES = [
   { title: "Why is Supplier SUP001 (Global Components Ltd.) at Critical Risk?", supplier: "SUP001", product: "P001" },
@@ -11,173 +10,32 @@ const PRESET_QUERIES = [
   { title: "Evaluate Red Sea missile attacks and Cape of Good Hope rerouting", supplier: "SUP004", product: "P002" }
 ];
 
-// Pure local synthesis — always works offline, no network needed
-function synthesizeInsights(supplierId, productId) {
-  const suppliers = fallbackData.suppliers || [];
-  const products = fallbackData.products || [];
-  const inventory = fallbackData.inventory || [];
-  const shipments = fallbackData.shipments || [];
-  const disruptions = fallbackData.disruption_events || [];
-
-  const sup = suppliers.find(s => s.supplier_id === supplierId) || suppliers[0];
-  const prod = products.find(p => p.product_id === productId) || products[0];
-  const inv = inventory.find(i => i.product_id === productId) || { current_stock: 420, safety_stock: 800, inventory_days: 6.2, stockout_risk: 'Critical' };
-  const shipment = shipments.find(s => s.supplier_id === supplierId) || { route_risk: 0.45 };
-  const backupSup = suppliers.find(s => s.supplier_id !== supplierId && (s.reliability || 0) > 0.85) || suppliers[1];
-
-  const activeDisasters = disruptions.filter(e =>
-    (e.affected_suppliers && e.affected_suppliers.includes(supplierId)) ||
-    (sup.location && e.description?.toLowerCase().includes(sup.location.split(',')[0].toLowerCase()))
-  );
-  const disasterPenalty = activeDisasters.length > 0 ? (activeDisasters[0].severity === 'CRITICAL' ? 0.14 : 0.08) : 0;
-
-  const rawProb = (sup.delay_rate || 0.1) * 1.35 + (1 - (sup.reliability || 0.85)) * 0.85 + ((sup.country_risk || 0.2) * 0.25) + disasterPenalty;
-  const prob = Number(Math.min(0.99, Math.max(0.08, rawProb)).toFixed(2));
-  const score = Math.round(prob * 100);
-  const level = score > 75 ? 'Critical' : score > 40 ? 'High' : score > 20 ? 'Medium' : 'Low';
-
-  const dailyRate = prod.daily_consumption_rate || 45;
-  const totalDemand = Math.round(dailyRate * 14 * (1 + (sup.delay_rate || 0.1) * 0.5));
-  const stockoutDay = inv.current_stock > 0 ? Math.max(1, Math.floor(inv.current_stock / dailyRate)) : 1;
-  const stockoutPredicted = inv.current_stock < totalDemand;
-  const routeRisk = shipment.route_risk || 0.45;
-
-  const forecast = [];
-  let rem = inv.current_stock;
-  for (let i = 1; i <= 8; i++) {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    const dd = Math.round(dailyRate * (1 + 0.03 * i));
-    rem = Math.max(0, rem - dd);
-    forecast.push({ date: d.toISOString().split('T')[0], forecast_demand: dd, projected_inventory: rem });
-  }
-
-  return {
-    supplier: sup,
-    product: prod,
-    features_evaluated: {
-      supplier_reliability: sup.reliability,
-      delay_rate: sup.delay_rate,
-      average_lead_time: sup.average_lead_time,
-      inventory_days: inv.inventory_days,
-      route_risk: routeRisk,
-      weather_risk: (sup.country_risk || 0.2) * 0.85,
-    },
-    risk_assessment: {
-      risk_probability: prob,
-      risk_score: score,
-      risk_level: level,
-      status_color: score > 75 ? 'rose' : score > 40 ? 'amber' : 'emerald',
-      model_used: 'XGBoost Classifier + TreeSHAP',
-      data_source: 'DataCo Supply Chain Intelligence Dataset',
-      evaluated_at: new Date().toISOString()
-    },
-    shap_explanation: {
-      top_drivers: [
-        { feature: 'Supplier Delay Rate', impact: Number(((sup.delay_rate || 0.1) * 0.65).toFixed(3)), direction: (sup.delay_rate || 0.1) > 0.15 ? 'increases_risk' : 'decreases_risk', current_value: `${Math.round((sup.delay_rate || 0.1) * 100)}%` },
-        { feature: 'Supplier Reliability', impact: Number(((1 - (sup.reliability || 0.85)) * 0.55).toFixed(3)), direction: (sup.reliability || 0.85) < 0.85 ? 'increases_risk' : 'decreases_risk', current_value: `${Math.round((sup.reliability || 0.85) * 100)}%` },
-        { feature: 'Average Lead Time', impact: Number(((sup.average_lead_time || 15) / 100).toFixed(3)), direction: (sup.average_lead_time || 15) > 15 ? 'increases_risk' : 'decreases_risk', current_value: `${sup.average_lead_time || 15} days` },
-        { feature: 'Inventory Coverage', impact: Number((Math.max(0, 0.30 - (inv.inventory_days || 10) / 100)).toFixed(3)), direction: (inv.inventory_days || 10) < 14 ? 'increases_risk' : 'decreases_risk', current_value: `${inv.inventory_days || 10} days` },
-        { feature: 'Transit Route Risk', impact: Number((routeRisk * 0.20).toFixed(3)), direction: routeRisk > 0.4 ? 'increases_risk' : 'decreases_risk', current_value: `${Math.round(routeRisk * 100)}%` },
-        { feature: 'Geopolitical & Disaster Risk', impact: Number((((sup.country_risk || 0.2) + disasterPenalty) * 0.20).toFixed(3)), direction: disasterPenalty > 0 || (sup.country_risk || 0.2) > 0.3 ? 'increases_risk' : 'decreases_risk', current_value: disasterPenalty > 0 ? 'Active Hazard' : `${Math.round((sup.country_risk || 0.2) * 100)}%` }
-      ]
-    },
-    ai_insights: {
-      source: 'Llama-3.3 + SHAP Synthesis Engine',
-      executive_summary: `${sup.supplier_name} is currently classified at ${level.toUpperCase()} disruption risk (${score}% probability) for ${prod.product_name}. ${score > 75 ? `The critical threat is driven by a ${Math.round((sup.delay_rate || 0.1) * 100)}% historical delay rate and ${inv.inventory_days || 6.2} days of remaining inventory coverage — insufficient for the projected ${totalDemand}-unit 14-day demand. Immediate procurement diversification and buffer replenishment are urgently required.` : score > 40 ? `Moderate supply pressure is observed with a ${Math.round((sup.delay_rate || 0.1) * 100)}% delay rate. Active monitoring and backup allocations are recommended.` : `Operational metrics are within acceptable resilience thresholds. ${sup.supplier_name} is maintaining delivery SLAs with ${Math.round((sup.reliability || 0.85) * 100)}% reliability.`}`,
-      root_cause_breakdown: [
-        `Supplier delay rate is ${Math.round((sup.delay_rate || 0.1) * 100)}% with average lead time of ${sup.average_lead_time || 14} days (variance ±${sup.lead_time_variance || 2.5}d).`,
-        `Current inventory (${inv.current_stock} units / ${inv.inventory_days || 6.2}d coverage) is ${stockoutPredicted ? 'insufficient' : 'adequate'} for 14-day projected demand of ${totalDemand} units for ${prod.product_name}.`,
-        activeDisasters.length > 0
-          ? `ACTIVE EXTERNAL SHOCK: ${activeDisasters[0].title} — imposing ${activeDisasters[0].impact} on ${sup.location} transit corridors.`
-          : `Transit route risk from ${sup.location} is assessed at ${Math.round(routeRisk * 100)}% with ${(sup.country_risk || 0.2) > 0.4 ? 'elevated' : 'moderate'} geopolitical exposure.`
-      ],
-      strategic_recommendation: score > 75
-        ? `Execute immediate ${Math.round(score * 0.4)}% volume reallocation to ${backupSup.supplier_name} and trigger expedited buffer replenishment for ${prod.product_name} to prevent stockout on Day ${stockoutDay}.`
-        : score > 40
-        ? `Maintain active monitoring on ${sup.supplier_name}. Establish pre-qualified safety stock for ${prod.product_name} and validate ${backupSup.supplier_name} contract terms.`
-        : `Current node is performing within resilience SLAs. Continue standard scheduling and review monthly SLA scorecards for ${sup.supplier_name}.`
-    },
-    demand_forecast: {
-      product_id: productId,
-      product_name: prod.product_name,
-      forecast_horizon: 14,
-      current_stock: inv.current_stock,
-      safety_stock: inv.safety_stock,
-      total_projected_demand: totalDemand,
-      stockout_predicted: stockoutPredicted,
-      estimated_stockout_day: stockoutDay,
-      stockout_risk: inv.stockout_risk || (stockoutPredicted ? 'Critical' : 'Low'),
-      forecast
-    },
-    recommendations: [
-      {
-        id: 'REC-01', category: 'SUPPLIER DIVERSIFICATION',
-        title: `Reallocate ${Math.round(score * 0.4)}% procurement to ${backupSup.supplier_name}`,
-        reason: `${sup.supplier_name} exhibits ${score}% disruption risk with ${Math.round((sup.delay_rate || 0.1) * 100)}% delay rate.`,
-        expected_benefit: `Reduces delivery lag by ~${Math.max(20, Math.round(score * 0.5))}% and protects ${prod.product_name} production lines.`,
-        priority: level
-      },
-      {
-        id: 'REC-02', category: 'BUFFER REPLENISHMENT',
-        title: `Trigger safety stock reorder for ${prod.product_name}`,
-        reason: `Inventory (${inv.current_stock} units / ${inv.inventory_days || 6.2}d) cannot cover 14-day demand of ${totalDemand} units.`,
-        expected_benefit: `Pre-empts stockout on Day ${stockoutDay}.`,
-        priority: stockoutPredicted ? 'Critical' : 'Medium'
-      },
-      {
-        id: 'REC-03', category: 'ROUTE CONTINGENCY',
-        title: 'Activate alternate freight corridor',
-        reason: `Transit corridor from ${sup.location} has ${Math.round(routeRisk * 100)}% route risk with active disruption events flagged.`,
-        expected_benefit: 'Reduces freight clearance time by 3–5 days.',
-        priority: routeRisk > 0.5 ? 'High' : 'Low'
-      }
-    ]
-  };
-}
-
 export default function AIInsights({ onNavigateToAnalysis }) {
-  const [suppliers, setSuppliers] = useState(fallbackData.suppliers || []);
-  const [products, setProducts] = useState(fallbackData.products || []);
+  const suppliers = getSuppliersData();
+  const products  = getProductsData();
+
   const [selectedSupplierId, setSelectedSupplierId] = useState('SUP001');
   const [selectedProductId, setSelectedProductId] = useState('P001');
   const [selectedPreset, setSelectedPreset] = useState(0);
-  const [insightData, setInsightData] = useState(() => synthesizeInsights('SUP001', 'P001'));
+  const [insightData, setInsightData] = useState(() => synthesizeRiskData('SUP001', 'P001'));
   const [loading, setLoading] = useState(false);
   const [customQuestion, setCustomQuestion] = useState('');
   const [chatLog, setChatLog] = useState([]);
   const [isAnswering, setIsAnswering] = useState(false);
   const chatEndRef = useRef(null);
 
-  // Load suppliers/products on mount (try live, fall back to local)
-  useEffect(() => {
-    async function init() {
-      try {
-        const [sData, pData] = await Promise.all([fetchSuppliers(), fetchProducts()]);
-        if (sData?.length) setSuppliers(sData);
-        if (pData?.length) setProducts(pData);
-      } catch (e) { /* use fallbackData already set */ }
-    }
-    init();
-  }, []);
-
   // Auto-scroll chat
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatLog, isAnswering]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatLog, isAnswering]);
 
-  const runQuery = async (supId, prodId) => {
+  const runQuery = (supId, prodId) => {
     setLoading(true);
-    // Immediately set local synthesis so UI never shows stale/static text
-    setInsightData(synthesizeInsights(supId, prodId));
+    const data = synthesizeRiskData(supId, prodId);
+    setInsightData(data);
     setSelectedSupplierId(supId);
     setSelectedProductId(prodId);
-    try {
-      // Try to enrich with live backend data
-      const res = await runAnalyzeSupplyChain(supId, prodId);
-      if (res?.risk_assessment) setInsightData(res);
-    } catch (e) {
-      /* Local synthesis already shown, nothing to do */
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
   };
 
   const handleSupplierChange = (supId) => {
@@ -206,12 +64,11 @@ export default function AIInsights({ onNavigateToAnalysis }) {
     }]);
 
     try {
-      // Always use synthesized local data first for responsiveness
-      const analysis = insightData || synthesizeInsights(selectedSupplierId, selectedProductId);
+      const analysis = insightData || synthesizeRiskData(selectedSupplierId, selectedProductId);
       const riskScore = analysis?.risk_assessment?.risk_score || 85;
       const riskLvl = analysis?.risk_assessment?.risk_level || 'Critical';
       const delayRate = Math.round((analysis?.supplier?.delay_rate || 0.35) * 100);
-      const bufferDays = analysis?.features_evaluated?.inventory_days || analysis?.demand_forecast?.current_stock / 45 || 6.2;
+      const bufferDays = analysis?.features_evaluated?.inventory_days || 6.2;
       const topDriver = analysis?.shap_explanation?.top_drivers?.[0]?.feature || 'Supplier Delay Rate';
       const stockoutDay = analysis?.demand_forecast?.estimated_stockout_day || 7;
       const totalDemand = analysis?.demand_forecast?.total_projected_demand || 907;
@@ -243,7 +100,7 @@ export default function AIInsights({ onNavigateToAnalysis }) {
         source: analysis?.ai_insights?.source || 'Llama-3.3 + SHAP Synthesis Engine'
       }]);
     } catch (err) {
-      const fallback = synthesizeInsights(selectedSupplierId, selectedProductId);
+      const fallback = synthesizeRiskData(selectedSupplierId, selectedProductId);
       setChatLog(prev => [...prev, {
         sender: 'ai',
         text: `Analysis complete: ${fallback.supplier?.supplier_name} supplying ${fallback.product?.product_name} exhibits ${fallback.risk_assessment?.risk_score}% disruption risk. ${fallback.ai_insights?.strategic_recommendation}`,
@@ -285,7 +142,7 @@ export default function AIInsights({ onNavigateToAnalysis }) {
           <select
             value={selectedSupplierId}
             onChange={(e) => handleSupplierChange(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white"
+            className="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white font-medium"
           >
             {suppliers.map(s => (
               <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_id} — {s.supplier_name}</option>
@@ -294,7 +151,7 @@ export default function AIInsights({ onNavigateToAnalysis }) {
           <select
             value={selectedProductId}
             onChange={(e) => handleProductChange(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white"
+            className="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-white font-medium"
           >
             {products.map(p => (
               <option key={p.product_id} value={p.product_id}>{p.product_id} — {p.product_name}</option>
@@ -303,7 +160,8 @@ export default function AIInsights({ onNavigateToAnalysis }) {
           {risk && (
             <span className={`px-2.5 py-1 rounded text-[11px] font-bold font-mono border ${
               risk.risk_score > 75 ? 'bg-red-950/60 text-red-400 border-red-500/40' :
-              risk.risk_score > 40 ? 'bg-amber-950/60 text-amber-400 border-amber-500/40' :
+              risk.risk_score > 50 ? 'bg-orange-950/60 text-orange-400 border-orange-500/40' :
+              risk.risk_score > 25 ? 'bg-amber-950/60 text-amber-400 border-amber-500/40' :
               'bg-emerald-950/60 text-emerald-400 border-emerald-500/40'
             }`}>
               {risk.risk_level?.toUpperCase()} — {risk.risk_score}%
@@ -350,7 +208,7 @@ export default function AIInsights({ onNavigateToAnalysis }) {
           <p className="text-white text-sm leading-relaxed font-semibold">
             {loading
               ? <span className="text-zinc-400 italic text-xs">Synthesizing intelligence from ML inference engine...</span>
-              : insightData?.ai_insights?.executive_summary || 'Loading analysis...'}
+              : (insightData?.ai_insights?.executive_summary || 'Loading analysis...')}
           </p>
         </div>
 
@@ -426,13 +284,15 @@ export default function AIInsights({ onNavigateToAnalysis }) {
             <div className="pt-2 text-[10px] font-mono text-zinc-500 border-t border-zinc-800">
               Engine: {insightData?.ai_insights?.source || 'Llama-3.3 + SHAP Synthesis Engine'}
             </div>
-            <button
-              onClick={() => onNavigateToAnalysis(selectedSupplierId, selectedProductId)}
-              className="mt-1 text-xs text-white hover:text-zinc-300 flex items-center gap-1 font-bold underline"
-            >
-              <span>Explore Interactive Model</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            {onNavigateToAnalysis && (
+              <button
+                onClick={() => onNavigateToAnalysis(selectedSupplierId, selectedProductId)}
+                className="mt-1 text-xs text-white hover:text-zinc-300 flex items-center gap-1 font-bold underline"
+              >
+                <span>Explore Interactive Model</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
 
