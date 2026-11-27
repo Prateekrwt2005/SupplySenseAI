@@ -16,9 +16,10 @@ import RiskBadge from '../components/RiskBadge';
 import GlobalRouteMap from '../components/GlobalRouteMap';
 import fallbackData from '../data/fallbackData.json';
 import { fetchShipments, fetchDisruptions, createDisruptionEvent } from '../services/api';
+import { getShipmentsData } from '../utils/riskSynthesis';
 
 export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
-  const [shipments, setShipments] = useState(() => fallbackData.shipments || []);
+  const [shipments, setShipments] = useState(() => getShipmentsData());
   const [disruptions, setDisruptions] = useState(() => fallbackData.disruption_events || []);
   const [filterMode, setFilterMode] = useState('ALL');
   const [viewMode, setViewMode] = useState('UNIFIED'); // 'UNIFIED', 'MAP', 'TABLE'
@@ -51,6 +52,12 @@ export default function ShipmentsRoutes({ onNavigateToAnalysis }) {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      setShipments(getShipmentsData());
+    };
+    window.addEventListener('supplysense-data-updated', handleUpdate);
+    return () => window.removeEventListener('supplysense-data-updated', handleUpdate);
   }, []);
 
   const handleAddEventSubmit = async (e) => {

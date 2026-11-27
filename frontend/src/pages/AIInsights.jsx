@@ -11,8 +11,17 @@ const PRESET_QUERIES = [
 ];
 
 export default function AIInsights({ onNavigateToAnalysis }) {
-  const suppliers = getSuppliersData();
-  const products  = getProductsData();
+  const [suppliers, setSuppliers] = useState(() => getSuppliersData());
+  const [products, setProducts]   = useState(() => getProductsData());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setSuppliers(getSuppliersData());
+      setProducts(getProductsData());
+    };
+    window.addEventListener('supplysense-data-updated', handleUpdate);
+    return () => window.removeEventListener('supplysense-data-updated', handleUpdate);
+  }, []);
 
   const [selectedSupplierId, setSelectedSupplierId] = useState('SUP001');
   const [selectedProductId, setSelectedProductId] = useState('P001');

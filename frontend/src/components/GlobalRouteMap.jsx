@@ -38,12 +38,49 @@ const NODES = {
   'Busan, KR':      { lat: 35.17, lon: 129.07, name: 'Busan Port Logistics Terminal', country: 'South Korea', code: 'PUS' },
   'São Paulo, BR':  { lat: -23.55, lon: -46.63, name: 'São Paulo Santos Terminal', country: 'Brazil', code: 'SAO' },
   'Dublin, IE':     { lat: 53.34, lon: -6.26,  name: 'Dublin Airport Freight Node', country: 'Ireland', code: 'DUB' },
+  'Pune, IN':       { lat: 18.52, lon: 73.85,  name: 'Pune Industrial Logistics Node', country: 'India', code: 'PNQ' },
+  'Mumbai, IN':     { lat: 18.92, lon: 72.83,  name: 'Mumbai JNPT Port Hub', country: 'India', code: 'BOM' },
+  'Delhi, IN':      { lat: 28.61, lon: 77.20,  name: 'Delhi Logistics Hub', country: 'India', code: 'DEL' },
+  'Bangalore, IN':  { lat: 12.97, lon: 77.59,  name: 'Bangalore Hardware Node', country: 'India', code: 'BLR' },
+  'Tokyo, JP':      { lat: 35.67, lon: 139.65, name: 'Tokyo Port Logistics Hub', country: 'Japan', code: 'TYO' },
+  'Seoul, KR':      { lat: 37.56, lon: 126.97, name: 'Seoul Incheon Logistics Hub', country: 'South Korea', code: 'ICN' },
+  'Munich, DE':     { lat: 48.13, lon: 11.58,  name: 'Munich Bavarian High-Tech Hub', country: 'Germany', code: 'MUC' },
+  'Frankfurt, DE':  { lat: 50.11, lon: 8.68,   name: 'Frankfurt Air Cargo Terminal', country: 'Germany', code: 'FRA' },
+  'Singapore, SG':  { lat: 1.35,  lon: 103.81, name: 'Port of Singapore Terminal', country: 'Singapore', code: 'SIN' },
+  'Shanghai, CN':   { lat: 31.23, lon: 121.47, name: 'Shanghai Yangshan Port', country: 'China', code: 'SHA' },
 
   // Destination Warehouses
   'Chicago, US':    { lat: 41.87, lon: -87.62, name: 'Chicago Central Logistics DC', country: 'United States', code: 'ORD' },
   'Newark, US':     { lat: 40.71, lon: -74.00, name: 'Newark East Coast Port/Air DC', country: 'United States', code: 'EWR' },
   'Reno, US':       { lat: 39.52, lon: -119.81, name: 'Reno West Coast Automated DC', country: 'United States', code: 'RNO' },
   'Dallas, US':     { lat: 32.77, lon: -96.79, name: 'Dallas South Inland Intermodal', country: 'United States', code: 'DFW' }
+};
+
+export const resolveNode = (locName, isDest = false) => {
+  if (!locName) return isDest ? NODES['Chicago, US'] : NODES['Shenzhen, CN'];
+  if (NODES[locName]) return NODES[locName];
+  
+  const lower = locName.toLowerCase();
+  for (const [key, node] of Object.entries(NODES)) {
+    if (lower.includes(key.toLowerCase().split(',')[0].trim())) {
+      return node;
+    }
+  }
+
+  if (lower.includes('india') || lower.includes('in') || lower.includes('pune') || lower.includes('mumbai') || lower.includes('delhi')) {
+    return NODES['Pune, IN'];
+  }
+  if (lower.includes('japan') || lower.includes('jp') || lower.includes('tokyo')) return NODES['Tokyo, JP'];
+  if (lower.includes('korea') || lower.includes('kr') || lower.includes('seoul')) return NODES['Seoul, KR'];
+  if (lower.includes('germany') || lower.includes('de') || lower.includes('munich') || lower.includes('frankfurt')) return NODES['Dresden, DE'];
+  if (lower.includes('singapore') || lower.includes('sg')) return NODES['Singapore, SG'];
+  if (lower.includes('taiwan') || lower.includes('tw')) return NODES['Taipei, TW'];
+  if (lower.includes('china') || lower.includes('cn')) return NODES['Shenzhen, CN'];
+  if (lower.includes('sweden') || lower.includes('se')) return NODES['Gothenburg, SE'];
+  if (lower.includes('brazil') || lower.includes('br')) return NODES['São Paulo, BR'];
+  if (lower.includes('ireland') || lower.includes('ie')) return NODES['Dublin, IE'];
+
+  return isDest ? NODES['Chicago, US'] : { lat: 21.0, lon: 79.0, name: locName, country: 'Global Hub', code: 'HUB' };
 };
 
 // Active Chokepoints and Geopolitical Conflict/Disaster Zones
@@ -441,8 +478,8 @@ export default function GlobalRouteMap({
           {/* ── Transit Route Arcs ── */}
           <g id="routesLayer">
             {filteredShipments.map(s => {
-              const orig = NODES[s.origin];
-              const dest = NODES[s.destination];
+              const orig = resolveNode(s.origin, false);
+              const dest = resolveNode(s.destination, true);
               if (!orig || !dest) return null;
 
               const isSelected = selectedRouteId === s.shipment_id;

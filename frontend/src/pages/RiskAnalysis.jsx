@@ -1,27 +1,85 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, CheckCircle2, Cpu, RefreshCw, Info, SlidersHorizontal, ChevronRight } from 'lucide-react';
+import { 
+  Activity, 
+  CheckCircle2, 
+  Cpu, 
+  RefreshCw, 
+  Info, 
+  SlidersHorizontal, 
+  ChevronRight, 
+  Plus, 
+  X, 
+  Truck, 
+  Navigation, 
+  Boxes, 
+  Ship, 
+  Plane, 
+  MapPin, 
+  AlertTriangle 
+} from 'lucide-react';
 import RiskBadge from '../components/RiskBadge';
-import { synthesizeRiskData, getSuppliersData, getProductsData } from '../utils/riskSynthesis';
+import { 
+  synthesizeRiskData, 
+  getSuppliersData, 
+  getProductsData, 
+  addSupplier 
+} from '../utils/riskSynthesis';
 
 export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProductId = 'P001' }) {
-  const allSuppliers = getSuppliersData();
-  const allProducts  = getProductsData();
+  const [allSuppliers, setAllSuppliers] = useState(() => getSuppliersData());
+  const [allProducts, setAllProducts]   = useState(() => getProductsData());
 
   const [selectedSupplier, setSelectedSupplier] = useState(initialSupplierId);
   const [selectedProduct,  setSelectedProduct]  = useState(initialProductId);
   const [result, setResult] = useState(() => synthesizeRiskData(initialSupplierId, initialProductId));
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Recompute when props change (e.g. navigate from Dashboard "Analyze" button)
+  // Modal for adding a custom supplier directly from Risk Analysis
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [customForm, setCustomForm] = useState({
+    supplier_name: '',
+    location: 'Pune, IN',
+    destination: 'Chicago, US',
+    tier: 'Tier 1',
+    component_id: 'P001',
+    transport_mode: 'Maritime',
+    transit_corridor: 'Indian Ocean & Suez / Cape Corridor',
+    average_lead_time: 18,
+    lead_time_variance: 4.2,
+    reliability: 0.74,
+    delay_rate: 0.35,
+    route_risk: 0.70,
+    inventory_days: 7.0,
+    current_stock: 450,
+    country_risk: 0.35,
+    hazard_factor: 'Red Sea Missile Threats & Port Berth Delays'
+  });
+
+  // Re-sync suppliers when prop changes or custom event fires
   useEffect(() => {
-    setSelectedSupplier(initialSupplierId);
+    const handleSync = () => {
+      const sups = getSuppliersData();
+      const prods = getProductsData();
+      setAllSuppliers(sups);
+      setAllProducts(prods);
+    };
+
+    window.addEventListener('supplysense-data-updated', handleSync);
+    return () => window.removeEventListener('supplysense-data-updated', handleSync);
+  }, []);
+
+  // Recompute when initial props change (e.g. from Suppliers or Dashboard "Analyze" button)
+  useEffect(() => {
+    const sups = getSuppliersData();
+    setAllSuppliers(sups);
+    const validSup = sups.find(s => s.supplier_id === initialSupplierId) ? initialSupplierId : (sups[0]?.supplier_id || 'SUP001');
+    setSelectedSupplier(validSup);
     setSelectedProduct(initialProductId);
-    setResult(synthesizeRiskData(initialSupplierId, initialProductId));
+    setResult(synthesizeRiskData(validSup, initialProductId));
   }, [initialSupplierId, initialProductId]);
 
   const runInference = (supId, prodId) => {
     setAnalyzing(true);
-    // Instant — pure local calculation, no network
     const data = synthesizeRiskData(supId, prodId);
     setResult(data);
     setAnalyzing(false);
@@ -29,12 +87,30 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
 
   const handleSupplierChange = (supId) => {
     setSelectedSupplier(supId);
-    runInference(supId, selectedProduct);
+    const supObj = allSuppliers.find(s => s.supplier_id === supId);
+    const prodToUse = supObj?.component_id || selectedProduct;
+    setSelectedProduct(prodToUse);
+    runInference(supId, prodToUse);
   };
 
   const handleProductChange = (prodId) => {
     setSelectedProduct(prodId);
     runInference(selectedSupplier, prodId);
+  };
+
+  const handleAddCustomSupplier = (e) => {
+    e.preventDefault();
+    if (!customForm.supplier_name.trim()) return;
+
+    const created = addSupplier(customForm);
+    const updatedSups = getSuppliersData();
+    setAllSuppliers(updatedSups);
+    setSelectedSupplier(created.supplier_id);
+    setSelectedProduct(created.component_id || 'P001');
+    setShowAddModal(false);
+
+    // Immediately run disruption inference for the new supplier
+    runInference(created.supplier_id, created.component_id || 'P001');
   };
 
   const risk  = result.risk_assessment;
@@ -61,11 +137,20 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
       <div className="human-card rounded-lg p-5 border-zinc-800 space-y-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {/* Supplier */}
+            {/* Supplier Selector */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                Target Supplier Node
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
+                  Target Supplier Node
+                </label>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-bold"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Feed Custom Supplier</span>
+                </button>
+              </div>
               <select
                 value={selectedSupplier}
                 onChange={(e) => handleSupplierChange(e.target.value)}
@@ -73,12 +158,13 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
               >
                 {allSuppliers.map(s => (
                   <option key={s.supplier_id} value={s.supplier_id}>
-                    {s.supplier_id} — {s.supplier_name} ({s.location})
+                    {s.supplier_id} — {s.supplier_name} ({s.location} &rarr; {s.destination || 'Chicago'}) {s.is_custom ? '★ Custom' : ''}
                   </option>
                 ))}
               </select>
             </div>
-            {/* Product */}
+
+            {/* Product Selector */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
                 Component / Part Number
@@ -97,14 +183,16 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
             </div>
           </div>
 
-          <button
-            onClick={() => runInference(selectedSupplier, selectedProduct)}
-            disabled={analyzing}
-            className="w-full lg:w-auto px-6 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex items-center justify-center gap-2"
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Run Disruption Inference</span>
-          </button>
+          <div className="flex items-center gap-2 w-full lg:w-auto">
+            <button
+              onClick={() => runInference(selectedSupplier, selectedProduct)}
+              disabled={analyzing}
+              className="flex-1 lg:flex-none px-6 py-2.5 rounded bg-white text-black hover:bg-zinc-200 font-bold text-xs transition-all flex items-center justify-center gap-2 font-mono"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>{analyzing ? 'Evaluating...' : 'Run Disruption Inference'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Quick-select pills */}
@@ -112,7 +200,7 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
           <span className="text-[11px] font-mono text-zinc-500 font-semibold mr-1">Quick Node:</span>
           {allSuppliers.map(s => {
             const isSelected = selectedSupplier === s.supplier_id;
-            const preview = synthesizeRiskData(s.supplier_id, selectedProduct);
+            const preview = synthesizeRiskData(s.supplier_id, s.component_id || selectedProduct);
             const sc = preview.risk_assessment.risk_score;
             const dotCls = sc > 75 ? 'bg-red-400' : sc > 50 ? 'bg-orange-400' : sc > 25 ? 'bg-amber-400' : 'bg-emerald-400';
             return (
@@ -126,7 +214,8 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
-                {s.supplier_id} ({s.supplier_name.split(' ')[0]})
+                <span>{s.supplier_id} ({s.supplier_name.split(' ')[0]})</span>
+                {s.is_custom && <span className="text-[9px] text-indigo-400 font-bold">★</span>}
               </button>
             );
           })}
@@ -170,7 +259,7 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
               </div>
               <div className="flex justify-between text-zinc-400">
                 <span>Data Source:</span>
-                <span className="font-bold text-emerald-400 text-[10px] text-right">{risk.data_source}</span>
+                <span className="font-bold text-emerald-400 text-[10px] text-right truncate max-w-[200px]">{risk.data_source}</span>
               </div>
               <div className="flex justify-between text-zinc-400">
                 <span>Probability:</span>
@@ -185,15 +274,25 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
 
           {/* Node Telemetry */}
           <div className="human-card rounded-lg p-5 border-zinc-800 text-xs space-y-3">
-            <h4 className="font-bold text-white uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-zinc-800 text-[11px] font-mono">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
-              Node Telemetry
+            <h4 className="font-bold text-white uppercase tracking-wider flex items-center justify-between pb-2 border-b border-zinc-800 text-[11px] font-mono">
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
+                Node & Corridor Telemetry
+              </span>
+              {sup.is_custom && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700">
+                  Custom Node
+                </span>
+              )}
             </h4>
             <div className="space-y-2.5 text-zinc-300">
               {[
                 { label: 'Supplier', val: sup.supplier_name, cls: 'text-white font-semibold' },
                 { label: 'Component', val: prod.product_name, cls: 'text-white font-semibold' },
-                { label: 'Location', val: sup.location, cls: 'text-zinc-200' },
+                { label: 'Source Origin', val: sup.location, cls: 'text-zinc-200 font-mono' },
+                { label: 'Destination Hub', val: sup.destination || 'Chicago, US', cls: 'text-zinc-200 font-mono' },
+                { label: 'Transit Corridor', val: `${sup.transit_corridor || 'Global Lane'} (${sup.transport_mode || 'Maritime'})`, cls: 'text-zinc-300 font-mono text-[11px]' },
+                { label: 'Route Risk', val: `${Math.round((feat.route_risk || 0.45) * 100)}%`, cls: (feat.route_risk || 0) > 0.5 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold' },
                 { label: 'Delay Rate', val: `${Math.round((sup.delay_rate || 0) * 100)}%`, cls: (sup.delay_rate || 0) > 0.2 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold' },
                 { label: 'Reliability', val: `${Math.round((sup.reliability || 0) * 100)}%`, cls: 'text-white font-bold' },
                 { label: 'Lead Time', val: `${sup.average_lead_time || 14} days (±${sup.lead_time_variance || 2}d)`, cls: 'text-zinc-200 font-mono' },
@@ -360,6 +459,192 @@ export default function RiskAnalysis({ initialSupplierId = 'SUP001', initialProd
           ))}
         </div>
       </div>
+
+      {/* ── Add / Simulate Custom Supplier Modal ── */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="human-card rounded-lg p-6 border-zinc-700 max-w-xl w-full space-y-4 bg-[#11141c] my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  Feed Custom Supplier & Transit Route Parameters
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-zinc-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCustomSupplier} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Supplier Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Tata Advanced Systems / Bosch Precision"
+                  value={customForm.supplier_name}
+                  onChange={(e) => setCustomForm({...customForm, supplier_name: e.target.value})}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Source / Origin Location</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Pune, IN"
+                    value={customForm.location}
+                    onChange={(e) => setCustomForm({...customForm, location: e.target.value})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Destination Warehouse</label>
+                  <select
+                    value={customForm.destination}
+                    onChange={(e) => setCustomForm({...customForm, destination: e.target.value})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                  >
+                    <option value="Chicago, US">Central Hub Chicago (ORD)</option>
+                    <option value="Newark, US">East Coast Port/Air DC (EWR)</option>
+                    <option value="Reno, US">West Coast Automated DC (RNO)</option>
+                    <option value="Dallas, US">South Inland Intermodal (DFW)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Component Supplied</label>
+                  <select
+                    value={customForm.component_id}
+                    onChange={(e) => setCustomForm({...customForm, component_id: e.target.value})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                  >
+                    {allProducts.map(p => (
+                      <option key={p.product_id} value={p.product_id}>
+                        {p.product_id} — {p.product_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Transport Mode</label>
+                  <select
+                    value={customForm.transport_mode}
+                    onChange={(e) => setCustomForm({...customForm, transport_mode: e.target.value})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                  >
+                    <option value="Maritime">Maritime (Ocean)</option>
+                    <option value="Air Freight">Air Freight</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Historical Delay Rate</label>
+                  <input
+                    type="number"
+                    step="0.02"
+                    min="0.01"
+                    max="0.99"
+                    value={customForm.delay_rate}
+                    onChange={(e) => setCustomForm({...customForm, delay_rate: Number(e.target.value)})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-mono font-bold text-red-400"
+                  />
+                  <span className="text-[10px] text-zinc-500 font-mono">{Math.round(customForm.delay_rate * 100)}% delays</span>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">SLA Reliability</label>
+                  <input
+                    type="number"
+                    step="0.02"
+                    min="0.10"
+                    max="0.99"
+                    value={customForm.reliability}
+                    onChange={(e) => setCustomForm({...customForm, reliability: Number(e.target.value)})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-mono font-bold text-emerald-400"
+                  />
+                  <span className="text-[10px] text-zinc-500 font-mono">{Math.round(customForm.reliability * 100)}%</span>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Route Vulnerability</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0.05"
+                    max="0.99"
+                    value={customForm.route_risk}
+                    onChange={(e) => setCustomForm({...customForm, route_risk: Number(e.target.value)})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-mono"
+                  />
+                  <span className="text-[10px] text-zinc-500 font-mono">{Math.round(customForm.route_risk * 100)}%</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Average Lead Time (days)</label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="90"
+                    value={customForm.average_lead_time}
+                    onChange={(e) => setCustomForm({...customForm, average_lead_time: Number(e.target.value)})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Inventory Days Buffer</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="60"
+                    value={customForm.inventory_days}
+                    onChange={(e) => setCustomForm({...customForm, inventory_days: Number(e.target.value)})}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-mono text-[11px]">Active External Hazard / Disruption Driver</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Red Sea Missile Attacks, Typhoon Port Congestion, or Normal Operations"
+                  value={customForm.hazard_factor}
+                  onChange={(e) => setCustomForm({...customForm, hazard_factor: e.target.value})}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-white font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded border border-zinc-700 text-zinc-300 hover:text-white font-mono"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded bg-white text-black hover:bg-zinc-200 font-bold font-mono transition-colors shadow-sm"
+                >
+                  Register & Run Inference
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

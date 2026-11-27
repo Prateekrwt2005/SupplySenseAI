@@ -1,5 +1,6 @@
 import axios from 'axios';
 import fallbackData from '../data/fallbackData.json';
+import { getSuppliersData, addSupplier, getShipmentsData } from '../utils/riskSynthesis';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://supplysense-backend-h1oz.onrender.com/api';
 
@@ -65,28 +66,20 @@ export const fetchSuppliers = async () => {
   } catch (err) {
     console.warn('API fetchSuppliers fallback:', err.message);
   }
-  return localSuppliers;
+  return getSuppliersData();
 };
 
 export const createSupplier = async (supplierData) => {
+  const addedSup = addSupplier(supplierData);
   try {
     const res = await apiClient.post('/suppliers', supplierData);
     if (res.data?.supplier) {
-      localSuppliers.push(res.data.supplier);
       return res.data;
     }
   } catch (err) {
     console.warn('API createSupplier fallback:', err.message);
   }
-  const newSup = {
-    ...supplierData,
-    supplier_id: supplierData.supplier_id || `SUP00${localSuppliers.length + 1}`,
-    reliability: Number(supplierData.reliability) || 0.85,
-    delay_rate: Number(supplierData.delay_rate) || 0.15,
-    average_lead_time: Number(supplierData.average_lead_time) || 14
-  };
-  localSuppliers.push(newSup);
-  return { status: 'success', supplier: newSup };
+  return { status: 'success', supplier: addedSup };
 };
 
 export const fetchProducts = async () => {
@@ -157,7 +150,7 @@ export const fetchShipments = async () => {
   } catch (err) {
     console.warn('API fetchShipments fallback:', err.message);
   }
-  return localShipments;
+  return getShipmentsData();
 };
 
 export const fetchRiskOverview = async () => {
